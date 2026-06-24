@@ -1,0 +1,80 @@
+{
+  "timestamp": "2026-06-24T06:39:44.309Z",
+  "mode": "DEVELOPER_MOCK_FIREBASE",
+  "metrics": {
+    "totalPostgresUsers": 318,
+    "totalFirebaseUsers": 318,
+    "missingFirebaseAccounts": 0,
+    "inconsistentUids": 0,
+    "remediationsAttempted": 0,
+    "remediationsSucceeded": 0,
+    "remediationsFailed": 0,
+    "readinessScore": 100
+  },
+  "remediations": {
+    "successful": [],
+    "failed": []
+  },
+  "sampleVerifications": [
+    {
+      "role": "Executive",
+      "fullName": "James Munene",
+      "email": "james.munene@movitgroup.com",
+      "jobTitle": "Chief Executive Officer (CEO)",
+      "department": "N/A",
+      "postgresUid": "mock-uid-amFtZXMubXVuZW5lQG1vdml0Z3JvdXAuY29t",
+      "firebaseUid": "mock-uid-amFtZXMubXVuZW5lQG1vdml0Z3JvdXAuY29t",
+      "tokenGenerated": "YES",
+      "tokenValidation": "SUCCESS",
+      "status": "PASS"
+    },
+    {
+      "role": "Manager",
+      "fullName": "John Kato",
+      "email": "john.kato@movitgroup.internal",
+      "jobTitle": "Sales Department Manager",
+      "department": "Sales",
+      "postgresUid": "mock-uid-am9obi5rYXRvQG1vdml0Z3JvdXAuaW50ZXJuYWw",
+      "firebaseUid": "mock-uid-am9obi5rYXRvQG1vdml0Z3JvdXAuaW50ZXJuYWw",
+      "tokenGenerated": "YES",
+      "tokenValidation": "SUCCESS",
+      "status": "PASS"
+    },
+    {
+      "role": "Supervisor",
+      "fullName": "Samuel Okello",
+      "email": "samuel.okello@movitgroup.internal",
+      "jobTitle": "Sales Field Supervisor",
+      "department": "Sales",
+      "postgresUid": "mock-uid-c2FtdWVsLm9rZWxsb0Btb3ZpdGdyb3VwLmludGVy",
+      "firebaseUid": "mock-uid-c2FtdWVsLm9rZWxsb0Btb3ZpdGdyb3VwLmludGVy",
+      "tokenGenerated": "YES",
+      "tokenValidation": "SUCCESS",
+      "status": "PASS"
+    },
+    {
+      "role": "Field Staff",
+      "fullName": "Sarah Namuli",
+      "email": "sarah.namuli@movitgroup.internal",
+      "jobTitle": "Sales Field Officer",
+      "department": "Sales",
+      "postgresUid": "mock-uid-c2FyYWgubmFtdWxpQG1vdml0Z3JvdXAuaW50ZXJu",
+      "firebaseUid": "mock-uid-c2FyYWgubmFtdWxpQG1vdml0Z3JvdXAuaW50ZXJu",
+      "tokenGenerated": "YES",
+      "tokenValidation": "SUCCESS",
+      "status": "PASS"
+    },
+    {
+      "role": "Administrator",
+      "fullName": "System Admin",
+      "email": "admin@movitgroup.internal",
+      "jobTitle": "Lead System Administrator",
+      "department": "ICT",
+      "postgresUid": "mock-uid-YWRtaW5AbW92aXRncm91cC5pbnRlcm5hbA",
+      "firebaseUid": "mock-uid-YWRtaW5AbW92aXRncm91cC5pbnRlcm5hbA",
+      "tokenGenerated": "YES",
+      "tokenValidation": "SUCCESS",
+      "status": "PASS"
+    }
+  ]
+}

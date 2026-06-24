@@ -1,0 +1,16 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a synchronized workforce user profile.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique user ID matching PostgreSQL and Firebase Auth" },
+        "email": { "type": "string", "description": "The employee email" },
+        "role": { "type": "string", "description": "The RBAC role assigned to the user" }
+      },
+      "required": ["id", "email", "role"]
+    }
+  },
+  "firestore": {}
+}

@@ -1,11 +1,14 @@
-<div align="center">
+# Supervisor Eye
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A Hierarchical Evidence-Based Reporting and Accountability System designed specifically for the Movit Group of Companies.
 
-  <h1>Built with AI Studio</h2>
+## Architectural Structure
+This is an enterprise monolithic full-stack application leveraging:
+- **Frontend:** React, Tailwind CSS, TypeScript, Vite
+- **Backend:** Node.js, Express, TypeScript
+- **Database:** PostgreSQL (via Drizzle ORM configured in `/server/db`)
+- **Shared:** Common Types Interfaces inside `/shared`
 
-  <p>The fastest path from prompt to production with Gemini.</p>
-
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Stages
+Project is segmented into 15 structured stages of development.
+Currently: **Stage 1 (Project Foundation)** complete.

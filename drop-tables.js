@@ -1,0 +1,11 @@
+const { db } = require('./server/db/index.js');
+const { sql } = require('drizzle-orm');
+
+async function drop() {
+  await db.execute(sql`DROP TABLE executive_summaries CASCADE;`);
+  await db.execute(sql`DROP TABLE ai_insights CASCADE;`);
+  console.log('Dropped');
+  process.exit(0);
+}
+
+drop().catch(console.error);

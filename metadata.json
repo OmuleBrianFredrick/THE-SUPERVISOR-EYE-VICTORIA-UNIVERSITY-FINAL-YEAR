@@ -1,0 +1,6 @@
+{
+  "name": "Supervisor Eye",
+  "description": "Hierarchical evidence-based reporting and accountability system for Movit Group of Companies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
