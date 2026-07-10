@@ -1,7 +1,26 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function Inactive() {
-  const { logout } = useAuth();
+  const { currentUser, loading, requiresOnboarding, accountStatus, profile, logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser) {
+        navigate('/login', { replace: true });
+      } else if (requiresOnboarding) {
+        navigate('/onboarding', { replace: true });
+      } else if (accountStatus === 'PENDING_APPROVAL') {
+        navigate('/pending-approval', { replace: true });
+      } else if (accountStatus === 'REJECTED') {
+        navigate('/rejected', { replace: true });
+      } else if (profile && profile.status === 'ACTIVE') {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [currentUser, loading, requiresOnboarding, accountStatus, profile, navigate]);
   
   return (
     <div className="flex flex-col h-screen bg-slate-50 items-center justify-center p-4 font-sans text-center">

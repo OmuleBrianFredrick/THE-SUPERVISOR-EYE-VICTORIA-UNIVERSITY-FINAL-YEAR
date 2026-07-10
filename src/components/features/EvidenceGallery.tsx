@@ -3,6 +3,7 @@ import { Camera, MapPin, AlertTriangle, CheckCircle, Video, FileText, BadgeInfo 
 
 interface Evidence {
   id: string;
+  reportId?: string;
   mediaUrl: string;
   thumbnailUrl?: string;
   mediaType: string;
@@ -38,7 +39,8 @@ export default function EvidenceGallery({ evidenceList, isSupervisor = false, on
        const auth = getAuth();
        const token = await auth.currentUser?.getIdToken();
 
-       const res = await fetch(`/api/v1/reports/${selectedItem.id}/evidence/${selectedItem.id}/verify`, { // Needs reportId, but we only have evidence id. Hack: change API to omit reportId or use any for now since it's ignoring it
+       const reportId = selectedItem.reportId || 'unknown';
+       const res = await fetch(`/api/v1/reports/${reportId}/evidence/${selectedItem.id}/verify`, {
          method: 'PATCH',
          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
          body: JSON.stringify({ verificationStatus: status })
@@ -193,9 +195,20 @@ export default function EvidenceGallery({ evidenceList, isSupervisor = false, on
                 </div>
               )}
               
-              <button onClick={() => setSelectedItem(null)} className="mt-4 w-full bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-lg hover:bg-slate-300">
-                CLOSE
-              </button>
+              <div className="mt-4 flex gap-2">
+                <a 
+                  href={selectedItem.mediaUrl} 
+                  download={`evidence-${selectedItem.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-1/2 bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-lg hover:bg-blue-100 transition"
+                >
+                  <FileText className="w-4 h-4" /> DOWNLOAD
+                </a>
+                <button onClick={() => setSelectedItem(null)} className="w-1/2 bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-lg hover:bg-slate-300 transition">
+                  CLOSE
+                </button>
+              </div>
             </div>
           </div>
         </div>

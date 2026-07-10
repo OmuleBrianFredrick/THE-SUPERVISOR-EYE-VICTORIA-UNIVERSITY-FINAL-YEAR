@@ -83,6 +83,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setLoading(true);
       setCurrentUser(user);
       if (user) {
         await fetchProfileData(user);
@@ -159,7 +160,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setProfileForce, 
       refreshProfile 
     }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

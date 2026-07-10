@@ -300,7 +300,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto px-6">
           <div className="bg-slate-900 rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
             <div className="md:w-2/5 aspect-square md:aspect-auto">
-              <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=800" alt="Executive" className="w-full h-full object-cover" />
+              <img src="manager.jpeg" alt="Executive" className="w-full h-full object-cover" />
             </div>
             <div className="md:w-3/5 p-10 md:p-14 flex flex-col justify-center text-white">
               <div className="inline-block text-pink-400 font-bold uppercase tracking-wider text-xs mb-6">Message from Leadership</div>
@@ -308,10 +308,89 @@ export default function Home() {
                 "Welcome to the new era of Movit operations. Supervisor Eye gives us the clarity and accountability needed to maintain our position as industry leaders across Africa."
               </blockquote>
               <div>
-                <div className="font-bold text-lg">Bruce M.</div>
+                <div className="font-bold text-lg">Omule Brian Fredrick.</div>
                 <div className="text-slate-400 text-sm">Group Executive Office</div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* IT TEAM SECTION */}
+      <section className="py-24 bg-slate-50 border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-black text-slate-900 mb-4">Meet part of our Development team</h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              The IT TEAM OF MOVIT working behind the scenes to deliver robust enterprise solutions.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              {
+                name: 'Omule Brian Fredrick',
+                role: 'Team Captain / IT Developer',
+                email: 'omulebrianfredrick@gmail.com',
+                phone: '+256702634715',
+                initials: 'OB',
+                imageUrl: '/omule.jpg' 
+              },
+              {
+                name: 'Delina Tedros Weldeab',
+                role: 'IT Developer',
+                email: 'vanu.ted2@gmail.com',
+                phone: '+250 795871861',
+                initials: 'DW',
+                imageUrl: 'delina.jpeg' 
+              },
+              {
+                name: 'Male Daniel Junior',
+                role: 'IT Developer',
+                email: 'danielmale62@gmail.com',
+                phone: '+256 772614374',
+                initials: 'MJ',
+                imageUrl: 'male.jpg'
+              },
+              {
+                name: 'Gordon Koang Bol',
+                role: 'IT Developer',
+                email: 'bolkoang340@gmail.com',
+                phone: '+256 786117198',
+                initials: 'GB',
+                imageUrl: 'bol.jpg' 
+              },
+              {
+                name: 'Kisa John Mark',
+                role: 'IT Developer',
+                email: 'kisajohnmark@gmail.com',
+                phone: '+256 756681514',
+                initials: 'KM',
+                imageUrl: 'mark.jpg' 
+              }
+            ].map((member, i) => (
+              <div key={i} className="bg-white rounded-2xl p-6 shadow-xl border border-slate-100 hover:shadow-2xl transition-shadow text-center">
+                {member.imageUrl ? (
+                  <img src={member.imageUrl} alt={member.name} className="w-20 h-20 mx-auto rounded-full object-cover mb-4 shadow-sm" />
+                ) : (
+                  <div className="w-20 h-20 mx-auto bg-pink-100 rounded-full flex items-center justify-center text-pink-600 font-bold text-2xl mb-4">
+                    {member.initials}
+                  </div>
+                )}
+                <h3 className="text-lg font-bold text-slate-900 mb-1">{member.name}</h3>
+                <div className="text-pink-600 text-sm font-bold uppercase tracking-wider mb-4">{member.role}</div>
+                <div className="space-y-2 text-sm text-slate-500">
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    {member.email}
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                    {member.phone}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -391,6 +470,7 @@ export default function Home() {
                 <li><Link to="/login" className="hover:text-white transition-colors">Employee Sign In</Link></li>
                 <li><Link to="/metrics" className="hover:text-white transition-colors">Performance Dashboard</Link></li>
                 <li><Link to="/reports" className="hover:text-white transition-colors">Report Submission</Link></li>
+                <li><Link to="/evidence" className="hover:text-white transition-colors">Evidence Library</Link></li>
               </ul>
             </div>
             <div>

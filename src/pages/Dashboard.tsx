@@ -5,6 +5,7 @@ import { User, Shield, Building2, X, Clock, Calendar, Phone, Mail, BadgeCheck, C
 import FieldStaffDashboard from '../components/dashboards/FieldStaffDashboard';
 import SupervisorDashboard from '../components/dashboards/SupervisorDashboard';
 import ExecutiveDashboard from '../components/dashboards/ExecutiveDashboard';
+import NotificationDropdown from '../components/notifications/NotificationDropdown';
 
 export default function Dashboard() {
   const { profile, logout } = useAuth();
@@ -13,8 +14,8 @@ export default function Dashboard() {
 
   const roleMatch = profile?.role || '';
   const isFieldStaff = roleMatch === 'Field Staff';
-  const isSupervisor = roleMatch === 'Supervisor' || roleMatch === 'Area Manager';
-  const isExecutive = roleMatch === 'Executive' || roleMatch === 'MD / Ops Director' || roleMatch === 'Platform Admin' || roleMatch === 'SUPER_ADMIN' || roleMatch === 'Administrator';
+  const isSupervisor = roleMatch === 'Supervisor' || roleMatch === 'Area Manager' || roleMatch === 'Manager';
+  const isExecutive = roleMatch === 'Executive' || roleMatch === 'MD / Ops Director' || roleMatch === 'Platform Admin' || roleMatch === 'SUPER_ADMIN' || roleMatch === 'Administrator' || roleMatch === 'SYSTEM_ADMIN' || ['IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN'].includes(roleMatch);
 
   const renderDashboardContent = () => {
     if (isExecutive) return <ExecutiveDashboard />;
@@ -28,7 +29,7 @@ export default function Dashboard() {
       {/* Top Navigation Bar */}
       <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-8 shrink-0">
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/dashboard')}>
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
             <span className="font-black text-xl italic tracking-tighter">MOVIT</span>
             <span className="font-bold text-slate-400">Supervisor Eye</span>
           </div>
@@ -55,11 +56,12 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-        <div 
-          onClick={() => setShowProfile(true)} 
-          className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition"
-          id="dashboard-profile-button"
-        >
+          <NotificationDropdown />
+          <div 
+            onClick={() => setShowProfile(true)} 
+            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition border-l border-slate-200 pl-4"
+            id="dashboard-profile-button"
+          >
           <div className="text-right">
             <p className="text-sm font-bold text-slate-800">{profile?.firstName || 'User'} {profile?.lastName || ''}</p>
             <p className="text-[10px] text-slate-500 uppercase font-semibold">{profile?.jobTitle || profile?.role || 'Staff'}</p>

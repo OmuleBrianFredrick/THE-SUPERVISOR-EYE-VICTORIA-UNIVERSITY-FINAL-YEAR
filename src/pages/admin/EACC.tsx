@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router';
-import { 
+import { ChevronRight, Home, 
   Users, 
   ShieldCheck, 
   Activity, 
@@ -20,7 +20,9 @@ import {
   AlertTriangle,
   HeartPulse,
   Target,
-  ArrowLeft
+  ArrowLeft,
+  Webhook,
+  Menu
 } from 'lucide-react';
 import ApprovalQueue from './ApprovalQueue';
 import UserManagement from './UserManagement';
@@ -37,6 +39,9 @@ import ApprovalChainsConfig from './components/ApprovalChainsConfig';
 import ExecutiveIntelligenceCenter from './components/ExecutiveIntelligenceCenter';
 import AIInsightsCenter from './components/AIInsightsCenter';
 import OrganizationalHealthCenter from './components/OrganizationalHealthCenter';
+import ReportApprovalsDashboard from './components/ReportApprovalsDashboard';
+import DelegationConfig from './components/DelegationConfig';
+import GovernanceConfig from './components/GovernanceConfig';
 import FieldStaffIntelligence from './components/FieldStaffIntelligence';
 import DepartmentIntelligence from './components/DepartmentIntelligence';
 import InsightEffectivenessDashboard from './components/InsightEffectivenessDashboard';
@@ -53,30 +58,24 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
+import EnterpriseIntegrationPlatform from "./components/EnterpriseIntegrationPlatform";
+import { useAdminStatsQuery } from "../../hooks/useQueries";
+
 export default function EACC() {
   const { getToken, profile } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [stats, setStats] = useState<any>(null);
-  
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    return new URLSearchParams(window.location.search).get('tab') || 'overview';
+  });
+  const { data: stats } = useAdminStatsQuery();
   useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch('/api/v1/admin/stats', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setStats(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
     }
-  };
+  }, [window.location.search]);
+
 
   const tabs = [
     { id: 'overview', label: 'EACC Dashboard', icon: LayoutDashboard },
@@ -91,6 +90,9 @@ export default function EACC() {
     { id: 'ai-feedback', label: 'AI Feedback Center', icon: CheckSquare },
     { id: 'escalations', label: 'Escalations Engine', icon: AlertTriangle },
     { id: 'chains', label: 'Approval Chains', icon: GitMerge },
+    { id: 'delegations', label: 'Delegation Config', icon: Users },
+    { id: 'governance-config', label: 'Governance Config', icon: Settings },
+    { id: 'integrations', label: 'Integration Platform', icon: Webhook },
     { id: 'gps', label: 'GPS Command Center', icon: Map },
     { id: 'compliance', label: 'Compliance Center', icon: ShieldCheck },
     { id: 'media', label: 'Media Governance', icon: ImageIcon },
@@ -99,14 +101,23 @@ export default function EACC() {
     { id: 'intelligence', label: 'Operational Analytics', icon: Activity },
     { id: 'executive', label: 'Executive Review', icon: Eye },
     { id: 'users', label: 'User Directory', icon: Users },
-    { id: 'approvals', label: 'Approval Queue', icon: CheckSquare },
+    { id: 'report-approvals', label: 'Report Approvals', icon: CheckSquare },
+    { id: 'approvals', label: 'Workforce Approvals', icon: Users },
     { id: 'content', label: 'Platform Content', icon: FileText },
   ];
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden relative">
+      {/* Sidebar Backdrop for Mobile */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-30 md:hidden"
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0">
+      <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 transition-transform duration-300 transform md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 shrink-0">
           <div className="font-black text-white tracking-tight flex items-center gap-2">
             <span className="text-pink-500 font-black">M</span> EACC
@@ -123,7 +134,7 @@ export default function EACC() {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors ${
                 activeTab === tab.id 
                   ? 'bg-pink-600 text-white' 
@@ -143,7 +154,30 @@ export default function EACC() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 flex flex-col overflow-hidden w-full">
+        {/* Top Breadcrumb Navigation */}
+        <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-4 shrink-0 flex items-center justify-between shadow-sm z-10">
+          <div className="flex items-center gap-3 text-sm font-semibold text-slate-500 overflow-hidden">
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="md:hidden p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 transition"
+              aria-label="Toggle navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 truncate text-xs sm:text-sm">
+              <button onClick={() => navigate('/dashboard')} className="hover:text-slate-900 flex items-center gap-1 transition-colors shrink-0">
+                <Home className="w-4 h-4" /> <span className="hidden sm:inline">Dashboard</span>
+              </button>
+              <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+              <span className="text-slate-700 hidden lg:inline">Enterprise Administration & Command Center</span>
+              <span className="text-slate-700 lg:hidden shrink-0">EACC</span>
+              <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+              <span className="text-pink-600 font-bold truncate">{tabs.find(t => t.id === activeTab)?.label || 'Overview'}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {activeTab === 'overview' && (
           <div className="max-w-6xl mx-auto space-y-8">
             <div>
@@ -247,6 +281,7 @@ export default function EACC() {
         {activeTab === 'role-validation' && <RoleValidationAudit />}
         {activeTab === 'workforce-sync' && <WorkforceAuthSync />}
         {activeTab === 'users' && <UserManagement />}
+        {activeTab === 'report-approvals' && <ReportApprovalsDashboard />}
         {activeTab === 'approvals' && <ApprovalQueue inline />}
         {activeTab === 'content' && <HomepageContent />}
         {activeTab === 'exec-intelligence' && <ExecutiveIntelligenceCenter />}
@@ -258,6 +293,9 @@ export default function EACC() {
         {activeTab === 'workforce-intelligence' && <WorkforceIntelligence />}
         {activeTab === 'escalations' && <EscalationDashboard />}
         {activeTab === 'chains' && <ApprovalChainsConfig />}
+        {activeTab === 'delegations' && <DelegationConfig />}
+        {activeTab === 'governance-config' && <GovernanceConfig />}
+        {activeTab === 'integrations' && <EnterpriseIntegrationPlatform />}
         {activeTab === 'compliance' && <ComplianceCenter />}
         {activeTab === 'storage' && <StorageAnalytics />}
         {activeTab === 'media' && <MediaGovernanceCenter />}
@@ -273,6 +311,7 @@ export default function EACC() {
              <p className="mt-2 text-sm text-center max-w-sm">This module exists structurally and is undergoing specific implementation in the next phase.</p>
            </div>
         )}
+      </div>
       </div>
     </div>
   );

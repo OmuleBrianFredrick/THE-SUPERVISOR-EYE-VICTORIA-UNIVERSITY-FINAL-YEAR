@@ -106,7 +106,11 @@ export const verifyToken = async (req: Request, res: Response, next: NextFunctio
     }
 
     if (!result.length) {
-      res.status(404).json({ error: 'Not Found: User not mapped' });
+      if (req.originalUrl.includes('/api/v1/auth/me')) {
+        res.json({ onboardingComplete: false });
+        return;
+      }
+      res.status(404).json({ error: 'User not mapped' });
       return;
     }
 

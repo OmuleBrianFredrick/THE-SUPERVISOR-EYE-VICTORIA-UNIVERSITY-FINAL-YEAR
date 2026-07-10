@@ -1,25 +1,36 @@
 import React from 'react';
-import { Activity, Target, TrendingUp, Users } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Activity, Target, TrendingUp, Users, Zap } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area, ComposedChart, Bar } from 'recharts';
 
 export default function OperationalIntelligence() {
   
   // Mock trend data
   const velocityData = [
-    { day: 'Mon', completion: 45, compliance: 98 },
-    { day: 'Tue', completion: 52, compliance: 97 },
-    { day: 'Wed', completion: 60, compliance: 95 },
-    { day: 'Thu', completion: 74, compliance: 98 },
-    { day: 'Fri', completion: 80, compliance: 99 },
-    { day: 'Sat', completion: 35, compliance: 96 },
-    { day: 'Sun', completion: 20, compliance: 98 },
+    { day: 'Mon', completion: 45, compliance: 98, forecast: 46 },
+    { day: 'Tue', completion: 52, compliance: 97, forecast: 50 },
+    { day: 'Wed', completion: 60, compliance: 95, forecast: 58 },
+    { day: 'Thu', completion: 74, compliance: 98, forecast: 70 },
+    { day: 'Fri', completion: 80, compliance: 99, forecast: 78 },
+    { day: 'Sat', completion: 35, compliance: 96, forecast: 38 },
+    { day: 'Sun', completion: 20, compliance: 98, forecast: 25 },
+    { day: 'Next Mon', completion: null, compliance: null, forecast: 48 },
+    { day: 'Next Tue', completion: null, compliance: null, forecast: 55 },
+  ];
+
+  const forecastingData = [
+    { month: 'Jul', actual: 4200, predicted: 4100 },
+    { month: 'Aug', actual: 4800, predicted: 4750 },
+    { month: 'Sep', actual: 5100, predicted: 5000 },
+    { month: 'Oct', actual: null, predicted: 5300 },
+    { month: 'Nov', actual: null, predicted: 5800 },
+    { month: 'Dec', actual: null, predicted: 6200 },
   ];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
        <div>
          <h2 className="text-2xl font-black text-slate-800">Operational Intelligence (AI Foundation)</h2>
-         <p className="text-slate-500">Executive metrics on task completion velocity and operational fluidity.</p>
+         <p className="text-slate-500">Executive metrics, trend analysis, predictive charts, and operational forecasting.</p>
        </div>
 
        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -47,10 +58,12 @@ export default function OperationalIntelligence() {
 
        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-             <h3 className="font-bold text-slate-800 mb-6">Task Completion Velocity (7-Day Trend)</h3>
+             <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+               Task Completion Velocity & AI Forecast (Trend Analysis)
+             </h3>
              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={velocityData}>
+                   <ComposedChart data={velocityData}>
                      <defs>
                         <linearGradient id="colorCompletion" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#db2777" stopOpacity={0.8}/>
@@ -61,23 +74,27 @@ export default function OperationalIntelligence() {
                      <XAxis dataKey="day" axisLine={false} tickLine={false} />
                      <YAxis axisLine={false} tickLine={false} />
                      <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
-                     <Area type="monotone" dataKey="completion" stroke="#db2777" fillOpacity={1} fill="url(#colorCompletion)" strokeWidth={3} />
-                   </AreaChart>
+                     <Area type="monotone" dataKey="completion" stroke="#db2777" fillOpacity={1} fill="url(#colorCompletion)" strokeWidth={3} name="Actual Completion" />
+                     <Line type="monotone" dataKey="forecast" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="AI Forecast" />
+                   </ComposedChart>
                 </ResponsiveContainer>
              </div>
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-             <h3 className="font-bold text-slate-800 mb-6">Compliance Trending</h3>
+             <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                Long-Term Operational Forecasting (Predictive Chart)
+             </h3>
              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={velocityData}>
+                   <ComposedChart data={forecastingData}>
                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                     <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                     <YAxis domain={[90, 100]} axisLine={false} tickLine={false} />
+                     <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                     <YAxis axisLine={false} tickLine={false} />
                      <RechartsTooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px' }} />
-                     <Line type="monotone" dataKey="compliance" stroke="#0ea5e9" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
-                   </LineChart>
+                     <Bar dataKey="actual" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Actual Volume" maxBarSize={40} />
+                     <Line type="monotone" dataKey="predicted" stroke="#8b5cf6" strokeWidth={3} dot={{ strokeWidth: 2, r: 4 }} name="Predicted Volume" />
+                   </ComposedChart>
                 </ResponsiveContainer>
              </div>
           </div>

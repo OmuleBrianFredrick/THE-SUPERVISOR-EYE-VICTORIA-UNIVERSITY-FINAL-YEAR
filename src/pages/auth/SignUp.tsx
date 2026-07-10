@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router';
 import { auth, createUserWithEmailAndPassword } from '../../lib/firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Loader2, ArrowLeft } from 'lucide-react';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
@@ -13,10 +14,10 @@ export default function SignUp() {
   const { currentUser, setProfileForce } = useAuth(); 
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !loading) {
       navigate('/dashboard');
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, loading, navigate]);
 
   const handleFetchProfile = async (token: string, method: string) => {
     try {
@@ -58,7 +59,7 @@ export default function SignUp() {
   return (
     <div className="flex h-screen bg-slate-50 items-center justify-center p-4 font-sans relative">
       <button 
-        onClick={() => navigate(-1)} 
+        onClick={() => navigate('/')} 
         className="absolute top-6 left-6 flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back
@@ -68,8 +69,23 @@ export default function SignUp() {
         <div className="flex justify-center mb-2">
           <img src="/logo.png" alt="Supervisor Eye Logo" className="h-32 w-auto object-contain" />
         </div>
-        <p className="text-center text-sm font-semibold uppercase tracking-widest text-slate-500 mb-8">Create Account</p>
+        <p className="text-center text-sm font-semibold uppercase tracking-widest text-slate-500 mb-6">Create Account</p>
         
+        <div className="mb-6">
+          <GoogleSignInButton 
+            label="SIGN UP WITH GOOGLE" 
+            disabled={loading} 
+            onLoadingChange={setLoading}
+            onError={setError}
+          />
+        </div>
+
+        <div className="mb-6 flex items-center justify-between">
+          <hr className="w-full border-slate-200" />
+          <span className="px-3 text-xs font-bold text-slate-400 uppercase shrink-0">Or with email</span>
+          <hr className="w-full border-slate-200" />
+        </div>
+
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-6 font-medium">
             {error}
@@ -81,7 +97,8 @@ export default function SignUp() {
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Email Address</label>
             <input 
               type="email" 
-              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-colors"
+              disabled={loading}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -91,7 +108,8 @@ export default function SignUp() {
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Password</label>
             <input 
               type="password" 
-              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-colors"
+              disabled={loading}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

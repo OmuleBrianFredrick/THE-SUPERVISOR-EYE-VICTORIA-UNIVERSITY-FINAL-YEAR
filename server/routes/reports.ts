@@ -1,24 +1,21 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { reports, evidence, tasks, users, notifications } from '../db/schema.js';
-import { eq, desc, and, or } from 'drizzle-orm';
+import { reports, evidence, tasks, users, notifications, reportVersions, reportComments, approvalChains, approvalSteps, reportApprovals } from '../db/schema.js';
+import { eq, desc, and, or, sql } from 'drizzle-orm';
 import { logAudit } from '../services/audit.js';
+import { verifyToken } from '../middleware/auth.js';
+import { validate, createReportSchema, updateReportSchema } from '../validations/index.js';
+import { getPagination, buildPaginatedResponse } from '../utils/pagination.js';
 
 const router = Router();
 
-// Middleware to ensure user is authenticated
-const requireAuth = (req: any, res: any, next: any) => {
-  if (!req.user || !req.dbUser) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
-
-router.use(requireAuth);
+router.use(verifyToken);
 
 // Get reports
 router.get('/', async (req: any, res: any) => {
   try {
+    const { page, limit, offset } = getPagination(req.query);
+
     const filters = [];
     const roleMatch = req.dbUser.role?.name || '';
     
@@ -35,17 +32,23 @@ router.get('/', async (req: any, res: any) => {
       }
     }
     
+    const whereClause = filters.length > 0 ? and(...filters) : undefined;
+
     const allReports = await db.query.reports.findMany({
-      where: filters.length > 0 ? and(...filters) : undefined,
+      where: whereClause,
       orderBy: [desc(reports.updatedAt)],
+      limit,
+      offset,
       with: {
         submitter: { columns: { id: true, firstName: true, lastName: true } },
         task: { columns: { id: true, title: true } },
         evidence: true
       }
     });
-    
-    res.json(allReports);
+
+    const [totalRows] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(reports).where(whereClause);
+
+    res.json(buildPaginatedResponse(allReports, totalRows.count, page, limit));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch reports' });
@@ -53,7 +56,7 @@ router.get('/', async (req: any, res: any) => {
 });
 
 // Submit report
-router.post('/', async (req: any, res: any) => {
+router.post('/', validate(createReportSchema), async (req: any, res: any) => {
   try {
     const { taskId, reportType, gpsLat, gpsLng, outsideGeofence, notes } = req.body;
     
@@ -102,11 +105,21 @@ router.post('/', async (req: any, res: any) => {
 });
 
 // Update report status (Approve/Reject/Revise) or Notes
-router.patch('/:id/status', async (req: any, res: any) => {
+router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { status, performanceScore, notes } = req.body; 
     
+    // Get existing to determine version
+    const existing = await db.query.reports.findFirst({
+      where: eq(reports.id, id),
+      with: { versions: true }
+    });
+    
+    if (!existing) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
     const updateData: any = { updatedAt: new Date() };
     if (status) updateData.status = status;
     if (performanceScore !== undefined) updateData.performanceScore = performanceScore;
@@ -114,6 +127,82 @@ router.patch('/:id/status', async (req: any, res: any) => {
 
     const updated = await db.update(reports).set(updateData).where(eq(reports.id, id)).returning();
     
+    // Create version
+    const newVersionNum = existing.versions.length + 1;
+    await db.insert(reportVersions).values({
+      reportId: id,
+      versionNumber: newVersionNum,
+      notes: notes !== undefined ? notes : existing.notes,
+      status: status || existing.status,
+      updatedBy: req.dbUser.id
+    });
+
+    if (updated.length > 0 && status === 'PENDING_REVIEW') {
+       // Trigger Enterprise Workflow & Approval Engine
+       const report = updated[0];
+       const submitter = await db.query.users.findFirst({ where: eq(users.id, report.submitterId) });
+       
+       if (submitter) {
+         // Find active chain for department
+         let activeChain = null;
+         if (submitter.departmentId) {
+            activeChain = await db.query.approvalChains.findFirst({
+               where: and(
+                  eq(approvalChains.departmentId, submitter.departmentId),
+                  eq(approvalChains.isActive, true)
+               )
+            });
+         }
+         // Fallback to global chain
+         if (!activeChain) {
+            activeChain = await db.query.approvalChains.findFirst({
+               where: and(
+                  eq(approvalChains.departmentId, null as any),
+                  eq(approvalChains.isActive, true)
+               )
+            });
+         }
+
+         if (activeChain) {
+            // Find Step 1
+            const firstStep = await db.query.approvalSteps.findFirst({
+               where: and(
+                  eq(approvalSteps.chainId, activeChain.id),
+                  eq(approvalSteps.stepOrder, 1)
+               )
+            });
+            
+            if (firstStep) {
+               let nextApproverId = firstStep.userId;
+               if (!nextApproverId && firstStep.roleId) {
+                  const usersWithRole = await db.query.users.findMany({ where: eq(users.roleId, firstStep.roleId) });
+                  if (usersWithRole.length > 0) nextApproverId = usersWithRole[0].id;
+               }
+               if (nextApproverId) {
+                  await db.insert(reportApprovals).values({
+                     reportId: report.id,
+                     stepId: firstStep.id,
+                     approverId: nextApproverId,
+                     deadline: new Date(Date.now() + firstStep.slaHours * 3600 * 1000)
+                  });
+               }
+            }
+         } else {
+            // Fallback if no chain: assign to department head (Supervisor)
+            const deptHead = await db.query.users.findFirst({
+               where: sql`${users.departmentId} = ${submitter.departmentId} AND ${users.roleId} IN (SELECT id FROM roles WHERE name = 'Supervisor')`
+            });
+            if (deptHead) {
+               await db.insert(reportApprovals).values({
+                  reportId: report.id,
+                  approverId: deptHead.id,
+                  deadline: new Date(Date.now() + 24 * 3600 * 1000)
+               });
+            }
+         }
+       }
+    }
+
     if (updated.length > 0 && updated[0].taskId && status) {
        // Also update task if applicable? Schema doesn't link directly, but we can update if needed.
        let taskStatus = 'IN_PROGRESS';
@@ -131,12 +220,17 @@ router.patch('/:id/status', async (req: any, res: any) => {
            { event: `REPORT_${status}`, message: `Report ${id} marked as ${status}` }
          );
          
-         await db.insert(notifications).values({
-           userId: updated[0].submitterId,
-           notificationType: status === 'APPROVED' ? 'APPROVAL' : 'REVISION_REQUEST',
-           title: `Report ${status}`,
-           message: `Your report has been ${status.toLowerCase()}.`
-         });
+         const { enqueueJob } = await import('../services/queue.js');
+        await enqueueJob({
+           queueName: 'notifications',
+           jobType: 'dispatch-notification',
+           payload: {
+             userId: updated[0].submitterId,
+             notificationType: status === 'APPROVED' ? 'APPROVAL' : 'REVISION_REQUEST',
+             title: `Report ${status}`,
+             message: `Your report has been ${status.toLowerCase()}.`
+           }
+        });
        } catch(e) {}
     }
     
@@ -144,6 +238,48 @@ router.patch('/:id/status', async (req: any, res: any) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update report status' });
+  }
+});
+
+// Get report timeline (versions and comments)
+router.get('/:id/timeline', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const versions = await db.query.reportVersions.findMany({
+      where: eq(reportVersions.reportId, id),
+      with: { updater: { columns: { id: true, firstName: true, lastName: true } } },
+      orderBy: [desc(reportVersions.createdAt)]
+    });
+    
+    const commentsList = await db.query.reportComments.findMany({
+      where: eq(reportComments.reportId, id),
+      with: { user: { columns: { id: true, firstName: true, lastName: true } } },
+      orderBy: [desc(reportComments.createdAt)]
+    });
+
+    res.json({ versions, comments: commentsList });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch timeline' });
+  }
+});
+
+// Add comment to report
+router.post('/:id/comments', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { comment } = req.body;
+    
+    const newComment = await db.insert(reportComments).values({
+      reportId: id,
+      userId: req.dbUser.id,
+      comment
+    }).returning();
+    
+    res.status(201).json(newComment[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to add comment' });
   }
 });
 
@@ -157,6 +293,44 @@ router.post('/:id/evidence', async (req: any, res: any) => {
     let fraudReason = '';
     let verificationStatus: any = 'PENDING';
     
+    // Check if the report and associated task exist
+    const report = await db.query.reports.findFirst({
+      where: eq(reports.id, id),
+      with: { task: true }
+    });
+    
+    if (!report) {
+       return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Geofence Validation
+    let isOutsideGeofence = outsideGeofence || false;
+    if (report.task && capturedLat && capturedLng && report.task.targetLocationLat && report.task.targetLocationLng) {
+       const R = 6371e3; // metres
+       const lat1 = capturedLat;
+       const lon1 = capturedLng;
+       const lat2 = Number(report.task.targetLocationLat);
+       const lon2 = Number(report.task.targetLocationLng);
+       
+       const phi1 = lat1 * Math.PI/180;
+       const phi2 = lat2 * Math.PI/180;
+       const deltaPhi = (lat2-lat1) * Math.PI/180;
+       const deltaLambda = (lon2-lon1) * Math.PI/180;
+
+       const a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) +
+                 Math.cos(phi1) * Math.cos(phi2) *
+                 Math.sin(deltaLambda/2) * Math.sin(deltaLambda/2);
+       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+       const distance = R * c;
+       if (distance > 500) { // 500 meters threshold
+          isOutsideGeofence = true;
+          fraudFlag = true;
+          fraudReason += `Media captured outside 500m geofence (approx ${Math.round(distance)}m away). `;
+          verificationStatus = 'FLAGGED';
+       }
+    }
+
     // EXIF Time check (60 minutes threshold instead of 10)
     const suppliedTime = capturedAt ? new Date(capturedAt) : new Date();
     const now = new Date();
@@ -184,7 +358,7 @@ router.post('/:id/evidence', async (req: any, res: any) => {
       thumbnailUrl,
       mediaType,
       fileHash,
-      outsideGeofence: outsideGeofence || false,
+      outsideGeofence: isOutsideGeofence,
       capturedLat,
       capturedLng,
       capturedAt: suppliedTime,

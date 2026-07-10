@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { storage, ref, uploadBytesResumable, getDownloadURL } from '../../lib/firebase';
-import { Camera, Image as ImageIcon, FileText, UploadCloud, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, FileText, UploadCloud, X, CheckCircle, AlertCircle, Loader2, WifiOff } from 'lucide-react';
+import { enqueueSync } from '../../lib/syncQueue';
 
 interface EvidenceUploaderProps {
   reportId: string;
@@ -16,18 +17,48 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+       window.removeEventListener('online', handleOnline);
+       window.removeEventListener('offline', handleOffline);
+    }
+  }, []);
 
   // File selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
-      setFile(selected);
       setError(null);
       setSuccess(false);
       setProgress(0);
+
+      // Validate File Type
+      const isImage = selected.type.startsWith('image/');
+      const isVideo = selected.type.startsWith('video/');
+      const isDoc = selected.type === 'application/pdf';
+
+      if (!isImage && !isVideo && !isDoc) {
+        setError('Invalid file type. Only Images, Videos, and PDFs are allowed.');
+        return;
+      }
+
+      // Validate File Size (Max 50MB)
+      const MAX_SIZE = 50 * 1024 * 1024;
+      if (selected.size > MAX_SIZE) {
+        setError('File size exceeds the 50MB limit.');
+        return;
+      }
+
+      setFile(selected);
       
-      if (selected.type.startsWith('image/')) {
+      if (isImage) {
         const url = URL.createObjectURL(selected);
         setPreviewUrl(url);
       } else {
@@ -80,10 +111,45 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
       const isDocument = file.type.startsWith('application/pdf');
       const mediaType = isVideo ? 'VIDEO' : (isDocument ? 'DOCUMENT' : 'PHOTO');
       
-      // We simulate GPS capture from Exif/Browser
-      let simulatedLat = 0.3476;
-      let simulatedLng = 32.5825; // Kampala
       let capturedAt = new Date(file.lastModified);
+
+      // Get actual GPS location if possible, else fallback to simulated
+      let capturedLat = 0.3476;
+      let capturedLng = 32.5825; // Kampala
+      
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        capturedLat = pos.coords.latitude;
+        capturedLng = pos.coords.longitude;
+      } catch (err) {
+        console.warn('Geolocation failed or denied, using default coordinates');
+      }
+
+      if (isOffline || !navigator.onLine || reportId.startsWith('offline_')) {
+         // Queue offline upload
+         await enqueueSync('UPLOAD_EVIDENCE', {
+            reportId,
+            file,
+            fileHash,
+            thumbnailDataUrl,
+            mediaType,
+            capturedLat,
+            capturedLng,
+            capturedAt: capturedAt.toISOString()
+         });
+         setSuccess(true);
+         onUploadComplete?.();
+         setTimeout(() => {
+           setFile(null);
+           setPreviewUrl(null);
+           setSuccess(false);
+           setProgress(0);
+         }, 2000);
+         setUploading(false);
+         return;
+      }
 
       // 2. Upload to Firebase
       const fileName = `reports/${reportId}/${Date.now()}_${file.name}`;
@@ -119,8 +185,8 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
               mediaType,
               fileHash,
               outsideGeofence: false, // In real app, calculate distance to task loc
-              capturedLat: simulatedLat,
-              capturedLng: simulatedLng,
+              capturedLat,
+              capturedLng,
               capturedAt: capturedAt.toISOString()
             })
           });

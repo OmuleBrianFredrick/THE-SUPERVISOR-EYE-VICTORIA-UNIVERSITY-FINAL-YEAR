@@ -10,6 +10,7 @@ import {
   onAuthStateChanged as realOnAuthStateChanged
 } from 'firebase/auth';
 import { getStorage, ref as realRef, uploadBytesResumable as realUploadBytesResumable, getDownloadURL as realGetDownloadURL } from 'firebase/storage';
+import { getFirestore } from 'firebase/firestore';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 
 // Set to true to disable real Firebase Auth and force developer mock authentication
@@ -21,6 +22,7 @@ let app: any = null;
 let auth: any = null;
 let googleProvider: any = null;
 let storage: any = null;
+let db: any = null;
 
 // Mock implementations for a seamless sandbox demonstration when Firebase config is missing
 const mockSubscribers = new Set<(user: any) => void>();
@@ -96,55 +98,71 @@ if (hasApiKey) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
     storage = getStorage(app);
+    db = getFirestore(app);
   } catch (error) {
     console.error("Failed to initialize Firebase Client SDK, falling back to Mock Auth", error);
     auth = mockAuthObj;
     googleProvider = { id: 'mock-google-provider' };
+    db = null;
   }
 } else {
   console.warn("⚠️ Firebase credentials missing in client. Initializing Supervisor Eye Mock Client Auth.");
   auth = mockAuthObj;
   googleProvider = { id: 'mock-google-provider' };
+  db = null;
+}
+
+function runMockGooglePicker() {
+  const msg = `Choose a Movit Group account to simulate Google Sign-In:\n\n` + 
+              `1. christianekarel@gmail.com (IT Support & admin)\n` +
+              `2. simpson.birungi@movitgroup.com (Executive Chairman)\n` +
+              `3. james.munene@movitgroup.com (CEO)\n` +
+              `4. bruce.mpamizo@movitgroup.com (Executive Director)\n` +
+              `5. adard.mukiibi@movitgroup.com (CFO)\n\n` +
+              `Or enter any other Gmail/Google email address directly.\n\n` +
+              `Enter email directly or choose a number (1-5):`;
+              
+  const choice = typeof window !== 'undefined' ? window.prompt(msg, 'christianekarel@gmail.com') : 'christianekarel@gmail.com';
+  let selectedEmail = 'christianekarel@gmail.com';
+  
+  if (choice) {
+    const trimmed = choice.trim();
+    if (trimmed === '1') selectedEmail = 'christianekarel@gmail.com';
+    else if (trimmed === '2') selectedEmail = 'simpson.birungi@movitgroup.com';
+    else if (trimmed === '3') selectedEmail = 'james.munene@movitgroup.com';
+    else if (trimmed === '4') selectedEmail = 'bruce.mpamizo@movitgroup.com';
+    else if (trimmed === '5') selectedEmail = 'adard.mukiibi@movitgroup.com';
+    else if (trimmed.includes('@')) selectedEmail = trimmed;
+  }
+  
+  // Consistent mock UID based on email so that we look up the same user in database after logouts!
+  const selectedUid = 'mock-google-' + btoa(selectedEmail).replace(/[^a-zA-Z0-9]/g, '').substring(0, 40);
+  mockUser = {
+    uid: selectedUid,
+    email: selectedEmail,
+    displayName: selectedEmail.split('@')[0].split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
+    getIdToken: async () => createIdToken(selectedUid, selectedEmail),
+  };
+  triggerMockAuthChange();
+  return { user: mockUser };
 }
 
 // Wrapped auth functions
 export async function signInWithPopup(authInstance: any, provider: any) {
   if (!hasApiKey || authInstance === mockAuthObj) {
-    const msg = `Choose a Movit Group account to simulate Google Sign-In:\n\n` + 
-                `1. christianekarel@gmail.com (IT Support & admin)\n` +
-                `2. simpson.birungi@movitgroup.com (Executive Chairman)\n` +
-                `3. james.munene@movitgroup.com (CEO)\n` +
-                `4. bruce.mpamizo@movitgroup.com (Executive Director)\n` +
-                `5. adard.mukiibi@movitgroup.com (CFO)\n\n` +
-                `Or enter any other Gmail/Google email address directly.\n\n` +
-                `Enter email directly or choose a number (1-5):`;
-                
-    const choice = typeof window !== 'undefined' ? window.prompt(msg, 'christianekarel@gmail.com') : 'christianekarel@gmail.com';
-    let selectedEmail = 'christianekarel@gmail.com';
-    
-    if (choice) {
-      const trimmed = choice.trim();
-      if (trimmed === '1') selectedEmail = 'christianekarel@gmail.com';
-      else if (trimmed === '2') selectedEmail = 'simpson.birungi@movitgroup.com';
-      else if (trimmed === '3') selectedEmail = 'james.munene@movitgroup.com';
-      else if (trimmed === '4') selectedEmail = 'bruce.mpamizo@movitgroup.com';
-      else if (trimmed === '5') selectedEmail = 'adard.mukiibi@movitgroup.com';
-      else if (trimmed.includes('@')) selectedEmail = trimmed;
-    }
-    
-    // Consistent mock UID based on email so that we look up the same user in database after logouts!
-    const selectedUid = 'mock-google-' + btoa(selectedEmail).replace(/[^a-zA-Z0-9]/g, '').substring(0, 40);
-    mockUser = {
-      uid: selectedUid,
-      email: selectedEmail,
-      displayName: selectedEmail.split('@')[0].split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
-      getIdToken: async () => createIdToken(selectedUid, selectedEmail),
-    };
-    triggerMockAuthChange();
-    return { user: mockUser };
+    return runMockGooglePicker();
   }
-  return realSignInWithPopup(authInstance, provider);
+  try {
+    return await realSignInWithPopup(authInstance, provider);
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('popup-closed')) {
+      throw err;
+    }
+    console.warn("⚠️ Google Sign-In popup blocked or domain unauthorized in AI Studio preview. Automatically falling back to account simulation.", err);
+    return runMockGooglePicker();
+  }
 }
 
 export async function signInWithEmailAndPassword(authInstance: any, email: string, password: string) {
@@ -240,4 +258,4 @@ export async function getDownloadURL(refInstance: any) {
   return realGetDownloadURL(refInstance);
 }
 
-export { auth, googleProvider, storage };
+export { auth, googleProvider, storage, db };

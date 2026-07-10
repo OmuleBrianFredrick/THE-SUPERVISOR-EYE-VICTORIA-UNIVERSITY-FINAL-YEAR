@@ -1,25 +1,28 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../db/index.js';
 import { users, roles, departments, homepageContent, tasks, reports, departmentAssignmentHistory } from '../db/schema.js';
-import { eq, desc, count, aliasedTable } from 'drizzle-orm';
+import { eq, desc, count, aliasedTable, sql } from 'drizzle-orm';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
 import { auth } from '../firebase.js';
 import * as fs from 'fs';
+import { validate, userApproveSchema, userUpdateSchema } from '../validations/index.js';
 
 const router = Router();
 
 router.use(verifyToken);
 // We use administrative and executive roles for authorization
-router.use(requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director']));
+router.use(requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']));
 
 // Overview Stats
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const totalUsers = await db.select({ count: count() }).from(users);
-    const activeUsers = await db.select({ count: count() }).from(users).where(eq(users.status, 'ACTIVE'));
-    const pendingUsers = await db.select({ count: count() }).from(users).where(eq(users.status, 'PENDING_APPROVAL'));
-    const suspendedUsers = await db.select({ count: count() }).from(users).where(eq(users.status, 'INACTIVE'));
+    const [userStats] = await db.select({
+      total: count(),
+      active: sql<number>`SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END)`,
+      pending: sql<number>`SUM(CASE WHEN status = 'PENDING_APPROVAL' THEN 1 ELSE 0 END)`,
+      suspended: sql<number>`SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END)`
+    }).from(users);
 
     const allRoles = await db.select().from(roles);
     
@@ -29,30 +32,34 @@ router.get('/stats', async (req: Request, res: Response) => {
     const supervisorRole = allRoles.find(r => r.name.toLowerCase().includes('supervisor'))?.id;
     const fieldStaffRole = allRoles.find(r => r.name.toLowerCase().includes('field'))?.id;
     
-    const executives = execRole ? await db.select({ count: count() }).from(users).where(eq(users.roleId, execRole)) : [{count: 0}];
-    const managers = managerRole ? await db.select({ count: count() }).from(users).where(eq(users.roleId, managerRole)) : [{count: 0}];
-    const supervisors = supervisorRole ? await db.select({ count: count() }).from(users).where(eq(users.roleId, supervisorRole)) : [{count: 0}];
-    const fieldStaff = fieldStaffRole ? await db.select({ count: count() }).from(users).where(eq(users.roleId, fieldStaffRole)) : [{count: 0}];
+    const [roleStats] = await db.select({
+      executives: sql<number>`SUM(CASE WHEN role_id = ${execRole || '00000000-0000-0000-0000-000000000000'} THEN 1 ELSE 0 END)`,
+      managers: sql<number>`SUM(CASE WHEN role_id = ${managerRole || '00000000-0000-0000-0000-000000000000'} THEN 1 ELSE 0 END)`,
+      supervisors: sql<number>`SUM(CASE WHEN role_id = ${supervisorRole || '00000000-0000-0000-0000-000000000000'} THEN 1 ELSE 0 END)`,
+      fieldStaff: sql<number>`SUM(CASE WHEN role_id = ${fieldStaffRole || '00000000-0000-0000-0000-000000000000'} THEN 1 ELSE 0 END)`,
+    }).from(users);
 
-    const totalReports = await db.select({ count: count() }).from(reports);
-    const approvedReports = await db.select({ count: count() }).from(reports).where(eq(reports.status, 'APPROVED'));
-    const pendingReports = await db.select({ count: count() }).from(reports).where(eq(reports.status, 'PENDING_REVIEW'));
+    const [reportStats] = await db.select({
+      total: count(),
+      approved: sql<number>`SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END)`,
+      pending: sql<number>`SUM(CASE WHEN status = 'PENDING_REVIEW' THEN 1 ELSE 0 END)`,
+    }).from(reports);
 
     res.json({
       users: {
-        total: totalUsers[0].count,
-        active: activeUsers[0].count,
-        pending: pendingUsers[0].count,
-        suspended: suspendedUsers[0].count,
-        executives: executives[0].count,
-        managers: managers[0].count,
-        supervisors: supervisors[0].count,
-        fieldStaff: fieldStaff[0].count
+        total: Number(userStats?.total || 0),
+        active: Number(userStats?.active || 0),
+        pending: Number(userStats?.pending || 0),
+        suspended: Number(userStats?.suspended || 0),
+        executives: Number(roleStats?.executives || 0),
+        managers: Number(roleStats?.managers || 0),
+        supervisors: Number(roleStats?.supervisors || 0),
+        fieldStaff: Number(roleStats?.fieldStaff || 0)
       },
       reports: {
-        total: totalReports[0].count,
-        approved: approvedReports[0].count,
-        pending: pendingReports[0].count
+        total: Number(reportStats?.total || 0),
+        approved: Number(reportStats?.approved || 0),
+        pending: Number(reportStats?.pending || 0)
       }
     });
 
@@ -231,7 +238,7 @@ router.get('/users/pending', async (req: Request, res: Response) => {
 });
 
 // Approve or Reject User
-router.post('/users/:id/approve', async (req: Request, res: Response) => {
+router.post('/users/:id/approve', validate(userApproveSchema), async (req: Request, res: Response) => {
   try {
     const { action, roleId, departmentId, managerId } = req.body; // action: 'APPROVE' | 'REJECT'
     const targetUserId = req.params.id;
@@ -343,7 +350,7 @@ router.get('/departments', async (req: Request, res: Response) => {
 });
 
 // Update User full
-router.patch('/users/:id', async (req: Request, res: Response) => {
+router.patch('/users/:id', validate(userUpdateSchema), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { roleId, departmentId, jobTitle, managerId, status } = req.body;
@@ -1008,6 +1015,42 @@ router.get('/workforce-sync', async (req: Request, res: Response) => {
     res.json({ success: false, message: 'No sync audit report found. Please run sync audit.' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// Manually reset a user's password
+router.post('/users/:id/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { temporaryPassword } = req.body;
+    
+    if (!temporaryPassword || temporaryPassword.length < 6) {
+      return res.status(400).json({ error: 'Temporary password must be at least 6 characters long.' });
+    }
+
+    const existingUserResult = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const existingUser = existingUserResult[0];
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (auth && !auth.isMock) {
+      await auth.updateUser(existingUser.firebaseUid, {
+        password: temporaryPassword
+      });
+    }
+
+    await logAudit(req.dbUser?.id || null, 'PASSWORD_RESET', req.ip, {
+      targetUserId: id,
+      targetEmail: existingUser.email,
+      actionBy: req.dbUser?.id
+    });
+
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (err: any) {
+    console.error('Error resetting password:', err);
+    res.status(500).json({ error: err.message || 'Failed to reset password' });
   }
 });
 

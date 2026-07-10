@@ -7,6 +7,8 @@ import analyticsRoutes from './analytics.js';
 import governanceRoutes from './governance.js';
 import approvalsRoutes from './approvals.js';
 import intelligenceRoutes from './intelligence.js';
+import evidenceRoutes from './evidence.js';
+import integrationRoutes from './integration.js';
 import { db } from '../db/index.js';
 import { homepageContent } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -20,7 +22,9 @@ router.use('/approvals', approvalsRoutes);
 router.use('/intelligence', intelligenceRoutes);
 router.use('/tasks', tasksRoutes);
 router.use('/reports', reportsRoutes);
+router.use('/evidence', evidenceRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/integration', integrationRoutes);
 
 // Public homepage info route
 router.get('/public/homepage', async (req, res) => {

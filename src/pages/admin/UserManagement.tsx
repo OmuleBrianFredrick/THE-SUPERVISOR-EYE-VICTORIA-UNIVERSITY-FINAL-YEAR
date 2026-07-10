@@ -1,34 +1,87 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { Loader2, Search, Edit2, ShieldAlert } from 'lucide-react';
+import React, { useState } from "react";
+import { Loader2, Search, Edit2, ShieldAlert } from "lucide-react";
+import { useUsersQuery } from "../../hooks/useQueries";
+
+import { useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 
 export default function UserManagement() {
-  const { getToken } = useAuth();
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: usersResponse, isLoading: loading } = useUsersQuery();
+  const users = usersResponse?.data || usersResponse || [];
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const { getToken } = useAuth();
+  const { success: showSuccess, error: showError } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string, data: any }) => {
       const token = await getToken();
-      if (!token) return;
-      const res = await fetch('/api/v1/admin/users', {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`/api/v1/admin/users/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
       });
-      if (res.ok) {
-        setUsers(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      showSuccess('User updated successfully');
+      setSelectedUser(null);
+    },
+    onError: (err: any) => {
+      showError(err.message || 'Failed to update user');
     }
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, temporaryPassword }: { id: string, temporaryPassword: string }) => {
+      const token = await getToken();
+      const res = await fetch(`/api/v1/admin/users/${id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ temporaryPassword })
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || await res.text() || 'Failed to reset password');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      showSuccess('Password reset successfully');
+      setTempPassword('');
+    },
+    onError: (err: any) => {
+      showError(err.message || 'Failed to reset password');
+    }
+  });
+
+  const handleUpdateStatus = (status: string) => {
+    if (!selectedUser) return;
+    updateUserMutation.mutate({ id: selectedUser.id, data: { status } });
   };
+
+  const handleResetPassword = () => {
+    if (!selectedUser || !tempPassword || tempPassword.length < 6) {
+      showError('Please enter a valid temporary password (min 6 chars)');
+      return;
+    }
+    resetPasswordMutation.mutate({ id: selectedUser.id, temporaryPassword: tempPassword });
+  };
+
+
 
   const filteredUsers = users.filter(u => 
     u.firstName.toLowerCase().includes(search.toLowerCase()) || 
@@ -104,7 +157,7 @@ export default function UserManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors tooltip" title="Edit User">
+                      <button onClick={() => setSelectedUser(user)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors tooltip" title="Edit User">
                         <Edit2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -121,7 +174,77 @@ export default function UserManagement() {
             </table>
           </div>
         )}
-      </div>
+      
+      {selectedUser && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Manage User</h2>
+              <button onClick={() => { setSelectedUser(null); setTempPassword(''); }} className="text-slate-400 hover:text-slate-600">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">{selectedUser.firstName} {selectedUser.lastName}</h3>
+                <p className="text-xs text-slate-500">{selectedUser.email}</p>
+                <div className="mt-2 text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded inline-block">
+                  Current Status: <span className={
+                    selectedUser.status === 'ACTIVE' ? 'text-emerald-600' :
+                    selectedUser.status === 'INACTIVE' ? 'text-red-600' : 'text-amber-600'
+                  }>{selectedUser.status}</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Account Status</h4>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleUpdateStatus('ACTIVE')}
+                    disabled={updateUserMutation.isPending || selectedUser.status === 'ACTIVE'}
+                    className="flex-1 py-2 text-sm font-bold rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Set Active
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus('INACTIVE')}
+                    disabled={updateUserMutation.isPending || selectedUser.status === 'INACTIVE'}
+                    className="flex-1 py-2 text-sm font-bold rounded bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Disable (Inactive)
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Manual Password Reset</h4>
+                <p className="text-xs text-slate-500">
+                  Assign a temporary password to this user. Advise them to reset it after logging in.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Temp Password (min 6)"
+                    value={tempPassword}
+                    onChange={(e) => setTempPassword(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-slate-300"
+                  />
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={resetPasswordMutation.isPending || tempPassword.length < 6}
+                    className="px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    {resetPasswordMutation.isPending ? 'Resetting...' : 'Reset'}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+</div>
     </div>
   );
 }

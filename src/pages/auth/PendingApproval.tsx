@@ -1,8 +1,25 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function PendingApproval() {
-  const { logout } = useAuth();
+  const { currentUser, loading, requiresOnboarding, accountStatus, logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!currentUser) {
+        navigate('/login', { replace: true });
+      } else if (requiresOnboarding) {
+        navigate('/onboarding', { replace: true });
+      } else if (accountStatus === 'ACTIVE') {
+        navigate('/dashboard', { replace: true });
+      } else if (accountStatus === 'REJECTED') {
+        navigate('/rejected', { replace: true });
+      }
+    }
+  }, [currentUser, loading, requiresOnboarding, accountStatus, navigate]);
   
   return (
     <div className="flex h-screen bg-slate-50 items-center justify-center p-4 font-sans text-center">

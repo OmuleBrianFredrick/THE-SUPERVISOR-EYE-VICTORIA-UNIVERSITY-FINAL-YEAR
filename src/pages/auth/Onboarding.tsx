@@ -56,7 +56,23 @@ export default function Onboarding() {
   const [fetchingLists, setFetchingLists] = useState(true);
   
   const navigate = useNavigate();
-  const { getToken, refreshProfile } = useAuth();
+  const { currentUser, loading: authLoading, requiresOnboarding, accountStatus, getToken, refreshProfile } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!currentUser) {
+        navigate('/login', { replace: true });
+      } else if (!requiresOnboarding) {
+        if (accountStatus === 'PENDING_APPROVAL') {
+          navigate('/pending-approval', { replace: true });
+        } else if (accountStatus === 'REJECTED') {
+          navigate('/rejected', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      }
+    }
+  }, [currentUser, authLoading, requiresOnboarding, accountStatus, navigate]);
   
   const organization = 'Movit Group of Companies';
 

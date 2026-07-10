@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { ReactNode } from 'react';
@@ -5,7 +6,7 @@ import { ReactNode } from 'react';
 export const AuthGuard = ({ children }: { children: ReactNode }) => {
   const { currentUser, profile, loading, requiresOnboarding, accountStatus } = useAuth();
 
-  if (loading) return null; // or a spinner
+  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 text-amber-500 animate-spin" /></div>;
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -31,7 +32,7 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
 export const RoleGuard = ({ children, allowedRoles }: { children: ReactNode, allowedRoles: string[] }) => {
   const { profile, loading } = useAuth();
 
-  if (loading) return null;
+  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="w-8 h-8 text-amber-500 animate-spin" /></div>;
 
   if (!profile || !allowedRoles.includes(profile.role)) {
     return <Navigate to="/unauthorized" replace />;

@@ -33,6 +33,32 @@ export const escalationStatusEnum = pgEnum('escalation_status', ['ACTIVE', 'RESO
 export const slaActionEnum = pgEnum('sla_action', ['NOTIFY', 'ESCALATE', 'AUTO_APPROVE', 'AUTO_REJECT']); 
 
 // Tables
+export const jobStatusEnum = pgEnum('job_status', ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'RETRIED']);
+
+export const backgroundJobs = pgTable('background_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  queueName: varchar('queue_name', { length: 255 }).notNull(),
+  jobType: varchar('job_type', { length: 255 }).notNull(),
+  payload: jsonb('payload').notNull(),
+  status: jobStatusEnum('status').default('PENDING').notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  maxAttempts: integer('max_attempts').default(3).notNull(),
+  lockedAt: timestamp('locked_at'),
+  lockedUntil: timestamp('locked_until'),
+  errorReason: text('error_reason'),
+  result: jsonb('result'),
+  scheduledFor: timestamp('scheduled_for').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+  return {
+    queueProcessingIdx: index('background_jobs_queue_processing_idx').on(table.queueName, table.status, table.scheduledFor, table.lockedUntil),
+    statusQueueIdx: index('background_jobs_status_queue_idx').on(table.status, table.queueName),
+    lockedUntilIdx: index('background_jobs_locked_until_idx').on(table.lockedUntil),
+    scheduledForIdx: index('background_jobs_scheduled_for_idx').on(table.scheduledFor),
+  }
+});
+
 export const roles = pgTable('roles', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull().unique(),
@@ -78,6 +104,9 @@ export const users = pgTable('users', {
     firebaseUidIdx: index('users_firebase_uid_idx').on(table.firebaseUid),
     departmentIdx: index('users_dept_idx').on(table.departmentId),
     employeeNumberIdx: index('users_employee_number_idx').on(table.employeeNumber),
+    roleIdx: index('users_role_idx').on(table.roleId),
+    statusIdx: index('users_status_idx').on(table.status),
+    managerIdx: index('users_manager_idx').on(table.managerId),
   }
 });
 
@@ -92,6 +121,10 @@ export const tasks = pgTable('tasks', {
   targetLocationLng: decimal('target_location_lng', { precision: 10, scale: 7 }),
   dueDate: timestamp('due_date').notNull(),
   status: taskStatusEnum('status').default('PENDING').notNull(),
+  extendedStatus: varchar('extended_status', { length: 50 }).default('Assigned').notNull(),
+  category: varchar('category', { length: 100 }).default('General').notNull(),
+  comments: jsonb('comments').default('[]'),
+  timeline: jsonb('timeline').default('[]'),
   assignedTo: uuid('assigned_to').references(() => users.id).notNull(),
   createdBy: uuid('created_by').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -99,6 +132,10 @@ export const tasks = pgTable('tasks', {
   return {
     assignedToIdx: index('tasks_assigned_to_idx').on(table.assignedTo),
     statusIdx: index('tasks_status_idx').on(table.status),
+    createdByIdx: index('tasks_created_by_idx').on(table.createdBy),
+    dueDateIdx: index('tasks_due_date_idx').on(table.dueDate),
+    taskTypeIdx: index('tasks_task_type_idx').on(table.taskType),
+    statusAssignedIdx: index('tasks_status_assigned_idx').on(table.status, table.assignedTo),
   }
 });
 
@@ -119,6 +156,9 @@ export const reports = pgTable('reports', {
   return {
     submitterIdx: index('reports_submitter_idx').on(table.submitterId),
     statusIdx: index('reports_status_idx').on(table.status),
+    taskIdIdx: index('reports_task_id_idx').on(table.taskId),
+    reportTypeIdx: index('reports_report_type_idx').on(table.reportType),
+    createdAtIdx: index('reports_created_at_idx').on(table.submittedAt),
   }
 });
 
@@ -152,7 +192,26 @@ export const approvals = pgTable('approvals', {
 }, (table) => {
   return {
     reportApproverIdx: index('approvals_report_approver_idx').on(table.reportId, table.approverId),
+    approverIdx: index('approvals_approver_idx').on(table.approverId),
   }
+});
+
+export const reportComments = pgTable('report_comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id').references(() => reports.id).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  comment: text('comment').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const reportVersions = pgTable('report_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id').references(() => reports.id).notNull(),
+  versionNumber: integer('version_number').notNull(),
+  notes: text('notes'),
+  status: reportStatusEnum('status').notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 export const notifications = pgTable('notifications', {
@@ -182,6 +241,43 @@ export const auditLogs = pgTable('audit_logs', {
   return {
     userActionIdx: index('audit_logs_user_action_idx').on(table.userId, table.action),
   }
+});
+
+export const apiKeys = pgTable('api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull(),
+  keyPrefix: varchar('key_prefix', { length: 255 }).notNull(),
+  keyHash: varchar('key_hash', { length: 255 }).notNull(),
+  scopes: jsonb('scopes').default('[]').notNull(),
+  createdBy: uuid('created_by').references(() => users.id),
+  isActive: boolean('is_active').default(true).notNull(),
+  lastUsedAt: timestamp('last_used_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const webhooks = pgTable('webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: varchar('name', { length: 255 }).notNull(),
+  endpointUrl: varchar('endpoint_url', { length: 1024 }).notNull(),
+  events: jsonb('events').default('[]').notNull(),
+  secret: varchar('secret', { length: 255 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  retryCount: integer('retry_count').default(3).notNull(),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const webhookLogs = pgTable('webhook_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  webhookId: uuid('webhook_id').references(() => webhooks.id).notNull(),
+  event: varchar('event', { length: 255 }).notNull(),
+  payloadSnapshot: jsonb('payload_snapshot'),
+  responseStatus: integer('response_status'),
+  responseBody: text('response_body'),
+  errorReason: text('error_reason'),
+  attemptCount: integer('attempt_count').default(1).notNull(),
+  status: syncStatusEnum('status').default('PENDING').notNull(),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
 });
 
 export const integrationSyncLogs = pgTable('integration_sync_logs', {
@@ -248,6 +344,14 @@ export const reportApprovals = pgTable('report_approvals', {
   assignedAt: timestamp('assigned_at').defaultNow().notNull(),
   actedAt: timestamp('acted_at'),
   deadline: timestamp('deadline'),
+}, (table) => {
+  return {
+    reportIdx: index('report_approvals_report_idx').on(table.reportId),
+    approverIdx: index('report_approvals_approver_idx').on(table.approverId),
+    statusIdx: index('report_approvals_status_idx').on(table.status),
+    deadlineIdx: index('report_approvals_deadline_idx').on(table.deadline),
+    statusDeadlineIdx: index('report_approvals_status_deadline_idx').on(table.status, table.deadline),
+  }
 });
 
 export const escalations = pgTable('escalations', {
@@ -259,6 +363,12 @@ export const escalations = pgTable('escalations', {
   status: escalationStatusEnum('status').default('ACTIVE').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   resolvedAt: timestamp('resolved_at'),
+}, (table) => {
+  return {
+    reportIdx: index('escalations_report_idx').on(table.reportId),
+    escalatedToIdx: index('escalations_escalated_to_idx').on(table.escalatedToId),
+    statusIdx: index('escalations_status_idx').on(table.status),
+  }
 });
 
 export const delegations = pgTable('delegations', {
@@ -388,10 +498,28 @@ export const reportsRelations = relations(reports, ({ one, many }) => ({
   submitter: one(users, { fields: [reports.submitterId], references: [users.id], relationName: "submittedReports" }),
   evidence: many(evidence),
   approvals: many(approvals),
+  comments: many(reportComments),
+  versions: many(reportVersions),
+}));
+
+export const reportCommentsRelations = relations(reportComments, ({ one }) => ({
+  report: one(reports, { fields: [reportComments.reportId], references: [reports.id] }),
+  user: one(users, { fields: [reportComments.userId], references: [users.id] }),
+}));
+
+export const reportVersionsRelations = relations(reportVersions, ({ one }) => ({
+  report: one(reports, { fields: [reportVersions.reportId], references: [reports.id] }),
+  updater: one(users, { fields: [reportVersions.updatedBy], references: [users.id] }),
 }));
 
 export const evidenceRelations = relations(evidence, ({ one }) => ({
   report: one(reports, { fields: [evidence.reportId], references: [reports.id] }),
+}));
+
+export const reportApprovalsRelations = relations(reportApprovals, ({ one }) => ({
+  report: one(reports, { fields: [reportApprovals.reportId], references: [reports.id] }),
+  step: one(approvalSteps, { fields: [reportApprovals.stepId], references: [approvalSteps.id] }),
+  approver: one(users, { fields: [reportApprovals.approverId], references: [users.id] }),
 }));
 
 export const approvalsRelations = relations(approvals, ({ one }) => ({

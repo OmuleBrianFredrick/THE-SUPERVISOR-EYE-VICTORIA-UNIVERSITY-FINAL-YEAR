@@ -3,16 +3,17 @@ import { db } from '../db/index.js';
 import { 
   aiInsights, executiveSummaries, orgHealthMetrics, 
   departmentIntelligence, userIntelligence, users, departments,
-  aiInsightFeedback, auditLogs 
+  aiInsightFeedback, auditLogs, tasks, reports
 } from '../db/schema.js';
 import { desc, eq, and, sql } from 'drizzle-orm';
 import { verifyToken, requireRole } from '../middleware/auth.js';
+import { validate, simulateGenerationSchema, feedbackSchema } from '../validations/index.js';
 
 const router = Router();
 
 router.use(verifyToken);
 // Restrict all intelligence data to Super Admins and Executives
-router.use(requireRole(['SUPER_ADMIN', 'EXECUTIVE']));
+router.use(requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']));
 
 router.get('/insights', async (req: any, res: any) => {
   try {
@@ -32,7 +33,7 @@ router.get('/insights', async (req: any, res: any) => {
   }
 });
 
-router.post('/insights/:id/feedback', async (req: any, res: any) => {
+router.post('/insights/:id/feedback', validate(feedbackSchema), async (req: any, res: any) => {
   try {
     const { status, comments, actionTaken } = req.body;
     const insightId = req.params.id;
@@ -171,87 +172,21 @@ router.get('/staff', async (req: any, res: any) => {
    }
 });
 
-// A simulation route to generate new insights (in reality, triggered by a cron job interacting with Gemini)
-router.post('/simulate-generation', async (req: any, res: any) => {
+// Generate intelligence insights using Gemini (Asynchronous via Queue)
+router.post('/simulate-generation', validate(simulateGenerationSchema), async (req: any, res: any) => {
    try {
-     // Generate some dummy intelligence data to simulate AI generated insights
+     const { enqueueJob } = await import('../services/queue.js');
      
-     // 1. Health Math
-     await db.insert(orgHealthMetrics).values({
-        healthScore: 82,
-        complianceScore: 78,
-        productivityScore: 88,
-        efficiencyScore: 85,
-        slaScore: 76
+     const job = await enqueueJob({
+       queueName: 'ai',
+       jobType: 'simulate-generation',
+       payload: req.body,
      });
      
-     // 2. Add an insight
-     await db.insert(aiInsights).values({
-        type: 'RISK',
-        severity: 'HIGH',
-        title: 'Geofence Compliance Drop in Western Region',
-        explanation: 'The predictive engine detected a 14% drop in spatial compliance over the last 72 hours, correlating with 3 new field staff onboardings. The variance pattern indicates a potential training deficiency rather than gps-spoofing.',
-        confidence: 89,
-        recommendedAction: 'Trigger mandatory E-Training Module 4 (Location Governance) for new Western region hires.',
-        sourceData: { affectedRegion: 'Western', usersCount: 3 }
-     });
-
-     await db.insert(aiInsights).values({
-        type: 'TREND',
-        severity: 'MEDIUM',
-        title: 'SLA Approval Velocity Increasing',
-        explanation: 'Approval chain bottlenecks have decreased by 18%. The automated SLA auto-escalation policy implemented last week is successfully routing idle approvals to secondary managers.',
-        confidence: 94,
-        recommendedAction: 'Maintain current SLA thresholds. Consider tightening Stock Audit Variance SLA from 24h to 12h.',
-        sourceData: { velocityImprovement: 0.18 }
-     });
-     
-     // 3. Exec Summary
-     await db.insert(executiveSummaries).values({
-        period: 'WEEKLY',
-        summaryText: 'Overall organizational health is stable at 82/100. Productivity remains high with a 92% task completion rate. The primary risk factor is field geofence compliance in the Western Region, resulting in 12 automated fraud flags. The SLA auto-escalation engine successfully bypassed 44 stalled approvals, improving organizational velocity by 18%.'
-     });
-     
-     // 4. Departments Intelligence
-     const depts = await db.query.departments.findMany();
-     if (depts.length > 0) {
-        await db.insert(departmentIntelligence).values({
-           departmentId: depts[0].id as string,
-           healthScore: 92,
-           riskScore: 8,
-           taskCompletionRate: 95,
-           complianceRate: 98,
-           slaPerformance: 94
-        });
-        if (depts.length > 1) {
-           await db.insert(departmentIntelligence).values({
-              departmentId: depts[1].id as string,
-              healthScore: 68,
-              riskScore: 32,
-              taskCompletionRate: 75,
-              complianceRate: 60,
-              slaPerformance: 70
-           });
-        }
-     }
-     
-     // 5. Staff Intelligence
-     const staff = await db.query.users.findMany({ limit: 5 });
-     for (const s of staff) {
-       await db.insert(userIntelligence).values({
-          userId: s.id,
-          roleType: 'FIELD_STAFF',
-          productivityScore: Math.floor(Math.random() * 40) + 60,
-          qualityScore: Math.floor(Math.random() * 40) + 60,
-          complianceScore: Math.floor(Math.random() * 40) + 60,
-          flags: Math.floor(Math.random() * 3)
-       });
-     }
-     
-     res.json({ success: true });
+     res.json({ success: true, jobId: job.id, message: 'Intelligence generation queued.' });
    } catch (err) {
-     console.error(err);
-     res.status(500).json({ error: 'Failed' });
+     console.error("Queue Job Error:", err);
+     res.status(500).json({ error: 'Failed to queue intelligence generation' });
    }
 });
 

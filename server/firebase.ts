@@ -72,7 +72,6 @@ try {
             serviceAccount = JSON.parse(decoded);
             console.log('Firebase Admin: Successfully decoded Base64 service account.');
           } catch (b64Error) {
-            console.warn('Firebase Admin: Direct Base64 decode failed. Trying clean Base64...');
             try {
               // Strip non-base64 chars
               const cleaned = rawVal.replace(/[^a-zA-Z0-9+/=]/g, '');
@@ -80,7 +79,7 @@ try {
               serviceAccount = JSON.parse(decodedCleaned);
               console.log('Firebase Admin: Successfully decoded clean Base64 service account.');
             } catch (cleanedB64Error) {
-              throw new Error(`All service account parsing strategies failed. Direct B64 error: ${b64Error}. Clean B64 error: ${cleanedB64Error}`);
+              throw new Error('All service account parsing strategies failed. The provided value is neither valid JSON nor valid Base64.');
             }
           }
         }
@@ -92,8 +91,7 @@ try {
         console.log('Firebase Admin SDK initialized successfully!');
         initialized = true;
       } catch (parseError) {
-        console.error('⚠️ Failed to parse or initialize with FIREBASE_SERVICE_ACCOUNT_BASE64:', parseError);
-        console.log('Attempting alternative Firebase initialization fallbacks...');
+        console.warn('⚠️ Failed to initialize Firebase Admin with provided FIREBASE_SERVICE_ACCOUNT_BASE64. The credential appears to be invalid or incorrectly formatted. Falling back to alternative methods or mock authentication.');
       }
     }
 

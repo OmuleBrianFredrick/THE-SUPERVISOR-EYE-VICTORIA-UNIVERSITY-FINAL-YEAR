@@ -1,0 +1,1 @@
+sed -i '1i import React, { useState } from "react";\nimport { Loader2, Search, Edit2, ShieldAlert } from "lucide-react";\nimport { useUsersQuery } from "../../hooks/useQueries";\n\nexport default function UserManagement() {' src/pages/admin/UserManagement.tsx

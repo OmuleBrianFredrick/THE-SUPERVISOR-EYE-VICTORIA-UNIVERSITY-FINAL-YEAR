@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { approvalChains, approvalSteps, reportApprovals, escalations, delegations, users, reports, evidence, tasks, auditLogs } from '../db/schema.js';
+import { approvalChains, approvalSteps, reportApprovals, escalations, delegations, users, reports, evidence, tasks, auditLogs, notifications } from '../db/schema.js';
 import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import { verifyToken, requireRole } from '../middleware/auth.js';
+import { validate, approvalDecisionSchema, createChainSchema, createChainStepSchema, createDelegationSchema } from '../validations/index.js';
 
 const router = Router();
 
@@ -51,7 +52,7 @@ router.get('/pending', async (req: any, res: any) => {
 });
 
 // 2. Execute Approval/Rejection Decision
-router.patch('/:id/decision', async (req: any, res: any) => {
+router.patch('/:id/decision', validate(approvalDecisionSchema), async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const { decision, comments } = req.body; // 'APPROVED', 'REJECTED'
@@ -124,7 +125,7 @@ router.patch('/:id/decision', async (req: any, res: any) => {
 });
 
 // 3. Get Escalations (Admin/Exec View)
-router.get('/escalations', requireRole(['SUPER_ADMIN', 'EXECUTIVE']), async (req: any, res: any) => {
+router.get('/escalations', requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']), async (req: any, res: any) => {
    try {
      const results = await db.query.escalations.findMany({
         with: {
@@ -141,7 +142,7 @@ router.get('/escalations', requireRole(['SUPER_ADMIN', 'EXECUTIVE']), async (req
 });
 
 // 4. Resolve Escalation
-router.patch('/escalations/:id/resolve', requireRole(['SUPER_ADMIN', 'EXECUTIVE']), async (req: any, res: any) => {
+router.patch('/escalations/:id/resolve', requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']), async (req: any, res: any) => {
    try {
       const { id } = req.params;
       const updated = await db.update(escalations).set({
@@ -154,7 +155,98 @@ router.patch('/escalations/:id/resolve', requireRole(['SUPER_ADMIN', 'EXECUTIVE'
    }
 });
 
-// 5. Audit Log fetching strictly for approvals
+// 5. Admin: Get all approval chains
+router.get('/chains', requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']), async (req: any, res: any) => {
+   try {
+      const chains = await db.query.approvalChains.findMany({
+         with: {
+            department: true
+         },
+         orderBy: [desc(approvalChains.createdAt)]
+      });
+      // fetch steps for each chain
+      const chainsWithSteps = await Promise.all(chains.map(async (chain) => {
+         const steps = await db.query.approvalSteps.findMany({
+            where: eq(approvalSteps.chainId, chain.id),
+            with: { role: true, user: true },
+            orderBy: (approvalSteps, { asc }) => [asc(approvalSteps.stepOrder)]
+         });
+         return { ...chain, steps };
+      }));
+      res.json(chainsWithSteps);
+   } catch(e) {
+      res.status(500).json({ error: 'Failed' });
+   }
+});
+
+// 6. Admin: Create approval chain
+router.post('/chains', requireRole(['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN']), validate(createChainSchema), async (req: any, res: any) => {
+   try {
+      const { name, departmentId, taskType, steps } = req.body;
+      const newChain = await db.insert(approvalChains).values({
+         name,
+         departmentId: departmentId || null,
+         taskType: taskType || null
+      }).returning();
+      
+      if (steps && steps.length > 0) {
+         const stepsToInsert = steps.map((s: any, idx: number) => ({
+            chainId: newChain[0].id,
+            stepOrder: idx + 1,
+            roleId: s.roleId || null,
+            userId: s.userId || null,
+            slaHours: s.slaHours || 24,
+            slaAction: s.slaAction || 'ESCALATE'
+         }));
+         await db.insert(approvalSteps).values(stepsToInsert);
+      }
+      res.json(newChain[0]);
+   } catch(e) {
+      res.status(500).json({ error: 'Failed' });
+   }
+});
+
+// 7. Get Delegations
+router.get('/delegations', async (req: any, res: any) => {
+   try {
+      // If admin, show all, otherwise just for user
+      const condition = ['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN'].includes(req.dbUser.role?.name || '') ? undefined : 
+         sql`${delegations.delegatorId} = ${req.dbUser.id} OR ${delegations.delegateeId} = ${req.dbUser.id}`;
+         
+      const results = await db.query.delegations.findMany({
+         where: condition,
+         with: {
+            delegator: true,
+            delegatee: true
+         },
+         orderBy: [desc(delegations.createdAt)]
+      });
+      res.json(results);
+   } catch(e) {
+      res.status(500).json({ error: 'Failed' });
+   }
+});
+
+// 8. Create Delegation
+router.post('/delegations', validate(createDelegationSchema), async (req: any, res: any) => {
+   try {
+      const { delegateeId, startDate, endDate } = req.body;
+      const delegatorId = ['SUPER_ADMIN', 'Administrator', 'Platform Admin', 'SYSTEM_ADMIN', 'Executive', 'MD / Ops Director', 'IT_ADMIN', 'IT_SUPPORT', 'NETWORK_ADMIN', 'SECURITY_ADMIN', 'DATABASE_ADMIN'].includes(req.dbUser.role?.name || '') && req.body.delegatorId ? req.body.delegatorId : req.dbUser.id;
+      
+      const newDelegation = await db.insert(delegations).values({
+         delegatorId,
+         delegateeId,
+         startDate: new Date(startDate),
+         endDate: new Date(endDate),
+         isActive: true
+      }).returning();
+      res.json(newDelegation[0]);
+   } catch(e) {
+      res.status(500).json({ error: 'Failed' });
+   }
+});
+
+// 9. Audit Log fetching strictly for approvals
 router.get('/audit', async (req: any, res: any) => {
     // For demo purposes, fetch recent decisions
     try {
@@ -168,6 +260,24 @@ router.get('/audit', async (req: any, res: any) => {
     } catch(e) {
         res.status(500).json({ error: 'Failed' });
     }
+});
+
+// 10. Background Job: SLA Checker
+router.post('/cron/sla-check', async (req: any, res: any) => {
+   try {
+      const { enqueueJob } = await import('../services/queue.js');
+      
+      const job = await enqueueJob({
+         queueName: 'sla',
+         jobType: 'sla-evaluation',
+         payload: {},
+      });
+      
+      res.json({ success: true, jobId: job.id, message: 'SLA evaluation queued.' });
+   } catch(e) {
+      console.error('SLA Queue Error:', e);
+      res.status(500).json({ error: 'Failed to queue SLA check' });
+   }
 });
 
 export default router;
