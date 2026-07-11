@@ -91,7 +91,7 @@ try {
         console.log('Firebase Admin SDK initialized successfully!');
         initialized = true;
       } catch (parseError) {
-        console.warn('⚠️ Failed to initialize Firebase Admin with provided FIREBASE_SERVICE_ACCOUNT_BASE64. The credential appears to be invalid or incorrectly formatted. Falling back to alternative methods or mock authentication.');
+        console.log('Firebase Admin SDK: Invalid FIREBASE_SERVICE_ACCOUNT_BASE64 format. Falling back to mock authentication.');
       }
     }
 
@@ -107,7 +107,7 @@ try {
     }
 
     if (!initialized) {
-      console.warn('Firebase Admin SDK disabled or failed to initialize correctly. Using mock authentication for development.');
+      console.log('Firebase Admin SDK using mock authentication for development.');
       authClient = createMockAuthClient();
     }
   } else {

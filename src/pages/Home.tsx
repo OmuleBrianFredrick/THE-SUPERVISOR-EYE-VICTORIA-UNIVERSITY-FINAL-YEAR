@@ -358,7 +358,7 @@ export default function Home() {
                 email: 'bolkoang340@gmail.com',
                 phone: '+256 786117198',
                 initials: 'GB',
-                imageUrl: 'bol.jpg' 
+                imageUrl: 'bol.jpeg' 
               },
               {
                 name: 'Kisa John Mark',
