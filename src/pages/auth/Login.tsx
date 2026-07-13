@@ -79,7 +79,7 @@ export default function Login() {
 
       <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
         <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="Supervisor Eye Logo" className="h-32 w-auto object-contain" />
+          <img src="/logo.png" alt="Supervisor Eye Logo" className="h-48 w-auto object-contain" />
         </div>
         
         {error && (

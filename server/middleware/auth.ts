@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { auth } from '../firebase.js';
 import { db } from '../db/index.js';
 import { users, roles, departments } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 
 declare global {
   namespace Express {
@@ -65,7 +65,7 @@ export const verifyToken = async (req: Request, res: Response, next: NextFunctio
       .from(users)
       .innerJoin(roles, eq(users.roleId, roles.id))
       .leftJoin(departments, eq(users.departmentId, departments.id))
-      .where(eq(users.email, decodedToken.email))
+      .where(ilike(users.email, decodedToken.email))
       .limit(1);
 
       if (emailResult.length) {

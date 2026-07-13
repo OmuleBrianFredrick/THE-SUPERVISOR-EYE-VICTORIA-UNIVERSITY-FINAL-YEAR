@@ -113,7 +113,8 @@ export default function FieldStaffDashboard() {
          ]);
          if (tRes.ok && rRes.ok) {
             const tasksData = await tRes.json();
-            const reportsData = await rRes.json();
+            const reportsResponse = await rRes.json();
+            const reportsData = reportsResponse.data || reportsResponse;
             setTasks(tasksData);
             setReports(reportsData);
             await cacheTasks(tasksData);
@@ -165,7 +166,7 @@ export default function FieldStaffDashboard() {
         }
         
         // Geolocation checks passed. Initialize draft report if not present
-        const draftReport = reports.find(r => r.taskId === task.id && r.status === 'DRAFT');
+        const draftReport = (reports || []).find(r => r.taskId === task.id && r.status === 'DRAFT');
         if (!draftReport) {
           if (navigator.onLine && !isOffline) {
             try {
@@ -305,7 +306,7 @@ export default function FieldStaffDashboard() {
 
   useEffect(() => {
     if (activeTask) {
-       const draft = reports.find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
+       const draft = (reports || []).find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
        if (draft) {
           setNotes(draft.notes || '');
        } else {
@@ -315,10 +316,10 @@ export default function FieldStaffDashboard() {
   }, [activeTask, reports]);
 
   // Filters logic
-  const filteredTasks = tasks.filter(t => {
+  const filteredTasks = (tasks || []).filter(t => {
     const matchesSearch = searchQuery ? (
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (t.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.description || '').toLowerCase().includes(searchQuery.toLowerCase())
     ) : true;
     
     const matchesStatus = statusFilter === 'ALL' ? true : t.extendedStatus === statusFilter;
@@ -328,7 +329,7 @@ export default function FieldStaffDashboard() {
   });
 
   const pendingTasks = filteredTasks.filter(t => t.status === 'PENDING' || t.status === 'IN_PROGRESS');
-  const rejectedReports = reports.filter(r => r.status === 'REJECTED');
+  const rejectedReports = (reports || []).filter(r => r.status === 'REJECTED');
 
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -358,7 +359,7 @@ export default function FieldStaffDashboard() {
   if (loading) return <div className="p-8 flex justify-center text-slate-400"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
 
   if (activeTask) {
-    const draftReport = reports.find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
+    const draftReport = (reports || []).find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
     
     if (!draftReport) {
        return <div className="p-8 flex justify-center text-slate-400"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
@@ -387,7 +388,7 @@ export default function FieldStaffDashboard() {
                   const submit = async () => {
                     if (draftReport.isOffline || isOffline || !navigator.onLine) {
                        const finalReport = { ...draftReport, status: 'PENDING_REVIEW', notes };
-                       const newReports = reports.map(r => r.id === draftReport.id ? finalReport : r);
+                       const newReports = (reports || []).map(r => r.id === draftReport.id ? finalReport : r);
                        setReports(newReports);
                        await cacheReports(newReports);
                        
@@ -442,7 +443,7 @@ export default function FieldStaffDashboard() {
                        const newNotes = notes + (notes ? '\n' : '') + `Scanned SKU: ${result}`;
                        setNotes(newNotes);
                        if (draftReport.isOffline || isOffline || !navigator.onLine) {
-                          const newReports = reports.map(r => r.id === draftReport.id ? { ...r, notes: newNotes } : r);
+                          const newReports = (reports || []).map(r => r.id === draftReport.id ? { ...r, notes: newNotes } : r);
                           setReports(newReports);
                           await cacheReports(newReports);
                           return;
@@ -467,7 +468,7 @@ export default function FieldStaffDashboard() {
                    placeholder="Enter details of your visit or audit here..."
                    onBlur={async () => {
                       if (draftReport.isOffline || isOffline || !navigator.onLine) {
-                         const newReports = reports.map(r => r.id === draftReport.id ? { ...r, notes } : r);
+                         const newReports = (reports || []).map(r => r.id === draftReport.id ? { ...r, notes } : r);
                          setReports(newReports);
                          await cacheReports(newReports);
                          return;
@@ -575,7 +576,7 @@ export default function FieldStaffDashboard() {
 
           {/* Tasks Grid */}
           <div className="flex-1 md:overflow-y-auto overflow-visible p-5 space-y-4 bg-slate-50/50">
-            {pendingTasks.map(t => (
+            {(pendingTasks || []).map(t => (
               <div 
                 key={t.id} 
                 className="border border-slate-200 p-5 rounded-2xl hover:border-slate-300 hover:shadow-sm transition-all bg-white flex flex-col gap-4 relative group"
@@ -723,7 +724,7 @@ export default function FieldStaffDashboard() {
           </div>
           
           <div className="p-4 overflow-y-auto flex-1 space-y-4">
-             {reports.filter(r => r.status !== 'REJECTED' && r.status !== 'DRAFT').slice(0, 10).map(r => (
+             {(reports || []).filter(r => r.status !== 'REJECTED' && r.status !== 'DRAFT').slice(0, 10).map(r => (
                <div key={r.id} className="flex items-start justify-between gap-3 border-b border-slate-800/60 pb-3 last:border-0 last:pb-0">
                  <div className="space-y-0.5">
                    <p className="text-xs font-bold text-slate-200 line-clamp-1">{r.task?.title || 'Report'}</p>
@@ -738,7 +739,7 @@ export default function FieldStaffDashboard() {
                  </span>
                </div>
              ))}
-             {reports.filter(r => r.status !== 'REJECTED' && r.status !== 'DRAFT').length === 0 && (
+             {(reports || []).filter(r => r.status !== 'REJECTED' && r.status !== 'DRAFT').length === 0 && (
                 <p className="text-xs text-slate-500 text-center py-8 italic">No submissions made yet.</p>
              )}
           </div>

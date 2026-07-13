@@ -191,15 +191,15 @@ export default function EACC() {
                   <div className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                     <Users className="w-4 h-4" /> Active Users
                   </div>
-                  <div className="text-4xl font-black text-slate-900">{stats.users?.active || 0}</div>
-                  <div className="text-xs text-slate-400 mt-2 font-medium">Out of {stats.users?.total || 0} total</div>
+                  <div className="text-4xl font-black text-slate-900">{stats?.users?.active || 0}</div>
+                  <div className="text-xs text-slate-400 mt-2 font-medium">Out of {stats?.users?.total || 0} total</div>
                 </div>
                 
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <div className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-500" /> Pending Approvals
                   </div>
-                  <div className="text-4xl font-black text-amber-600">{stats.users?.pending || 0}</div>
+                  <div className="text-4xl font-black text-amber-600">{stats?.users?.pending || 0}</div>
                   <div className="text-xs text-slate-400 mt-2 font-medium">Require admin review</div>
                 </div>
                 
@@ -207,7 +207,7 @@ export default function EACC() {
                   <div className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                     <CheckSquare className="w-4 h-4" /> Approvals Total
                   </div>
-                  <div className="text-4xl font-black text-emerald-600">{stats.reports?.approved || 0}</div>
+                  <div className="text-4xl font-black text-emerald-600">{stats?.reports?.approved || 0}</div>
                   <div className="text-xs text-slate-400 mt-2 font-medium">Successfully processed</div>
                 </div>
                 
@@ -231,10 +231,10 @@ export default function EACC() {
                    {stats ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={[
-                          { name: 'Executives', count: stats.users.executives },
-                          { name: 'Managers', count: stats.users.managers },
-                          { name: 'Supervisors', count: stats.users.supervisors },
-                          { name: 'Field Staff', count: stats.users.fieldStaff },
+                          { name: 'Executives', count: stats?.users?.executives },
+                          { name: 'Managers', count: stats?.users?.managers },
+                          { name: 'Supervisors', count: stats?.users?.supervisors },
+                          { name: 'Field Staff', count: stats?.users?.fieldStaff },
                         ]}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />

@@ -54,7 +54,20 @@ export async function processNextJob(queueName: string) {
     return null;
   }
   
-  return jobs[0];
+  const j = jobs[0];
+  return {
+    ...j,
+    queueName: j.queue_name !== undefined ? j.queue_name : j.queueName,
+    jobType: j.job_type !== undefined ? j.job_type : j.jobType,
+    attempts: j.attempts !== undefined ? j.attempts : j.attempts,
+    maxAttempts: j.max_attempts !== undefined ? j.max_attempts : j.maxAttempts,
+    lockedAt: j.locked_at !== undefined ? j.locked_at : j.lockedAt,
+    lockedUntil: j.locked_until !== undefined ? j.locked_until : j.lockedUntil,
+    errorReason: j.error_reason !== undefined ? j.error_reason : j.errorReason,
+    scheduledFor: j.scheduled_for !== undefined ? j.scheduled_for : j.scheduledFor,
+    createdAt: j.created_at !== undefined ? j.created_at : j.createdAt,
+    updatedAt: j.updated_at !== undefined ? j.updated_at : j.updatedAt,
+  };
 }
 
 export async function markJobComplete(jobId: string, resultData?: any) {

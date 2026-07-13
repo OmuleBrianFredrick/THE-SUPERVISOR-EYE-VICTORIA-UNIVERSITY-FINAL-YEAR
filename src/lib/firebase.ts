@@ -167,7 +167,7 @@ export async function signInWithPopup(authInstance: any, provider: any) {
 
 export async function signInWithEmailAndPassword(authInstance: any, email: string, password: string) {
   if (!hasApiKey || authInstance === mockAuthObj) {
-    const cleanEmail = email || 'christianekarel@gmail.com';
+    const cleanEmail = (email || 'christianekarel@gmail.com').toLowerCase().trim();
     // Consistent mock UID based on email so that they log into the EXACT SAME existing DB user account every time!
     const selectedUid = 'mock-uid-' + btoa(cleanEmail).replace(/[^a-zA-Z0-9]/g, '').substring(0, 40);
     mockUser = {

@@ -45,7 +45,7 @@ export default function Home() {
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img src="/logo.png" alt="Supervisor Eye" className="h-12 w-auto object-contain" />
+            <img src="/logo.png" alt="Supervisor Eye" className="h-16 w-auto object-contain" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
             <a href="#spotlight" className="hover:text-pink-600 transition-colors">Company</a>
@@ -459,7 +459,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-1">
-              <img src="/logo.png" alt="Supervisor Eye" className="h-10 w-auto object-contain brightness-0 invert opacity-80 mb-6" />
+              <img src="/logo.png" alt="Supervisor Eye" className="h-16 w-auto object-contain brightness-0 invert opacity-80 mb-6" />
               <p className="text-sm">
                 Internal enterprise platform for Movit Group of Companies. Unauthorized access is strictly prohibited.
               </p>
