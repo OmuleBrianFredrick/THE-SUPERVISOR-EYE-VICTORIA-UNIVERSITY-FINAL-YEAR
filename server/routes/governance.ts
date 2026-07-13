@@ -303,4 +303,60 @@ router.get('/gis-data', async (req: any, res: any) => {
   }
 });
 
+// Policies load and update routes
+import { promises as fsPromises } from 'fs';
+import pathPromises from 'path';
+
+const configPath = pathPromises.join(process.cwd(), 'server', 'db', 'governance-config.json');
+
+const defaultPolicies = {
+  aiFrequency: "DAILY",
+  intelligenceThreshold: "HIGH",
+  executiveBriefingSchedule: "WEEKLY",
+  scoringRules: "BALANCED",
+  defaultSlaHours: 24,
+  slaBreachAction: "ESCALATE",
+  criticalEscalationDelay: "2",
+  autoResolveEscalations: true,
+  geofenceVarianceLimit: 500,
+  timeAnomalyTolerance: 60,
+  alertSensitivity: "HIGH",
+  slaBreachExecutiveDigest: true,
+  fraudAlertPush: true
+};
+
+async function getPolicies() {
+  try {
+    const data = await fsPromises.readFile(configPath, 'utf8');
+    return JSON.parse(data);
+  } catch (e) {
+    return defaultPolicies;
+  }
+}
+
+async function savePolicies(policies: any) {
+  await fsPromises.mkdir(pathPromises.dirname(configPath), { recursive: true });
+  await fsPromises.writeFile(configPath, JSON.stringify(policies, null, 2), 'utf8');
+}
+
+router.get('/policies', async (req: any, res: any) => {
+  try {
+    const policies = await getPolicies();
+    res.json(policies);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load governance policies' });
+  }
+});
+
+router.post('/policies', async (req: any, res: any) => {
+  try {
+    const current = await getPolicies();
+    const updated = { ...current, ...req.body };
+    await savePolicies(updated);
+    res.json({ success: true, policies: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update governance policies' });
+  }
+});
+
 export default router;
