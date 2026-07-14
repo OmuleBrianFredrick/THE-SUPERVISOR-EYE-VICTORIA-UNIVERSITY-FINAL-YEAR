@@ -267,8 +267,11 @@ export const register = async (req: Request, res: Response) => {
     }
     
     res.json({ success: true, user: newUser[0] });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error in registration:', err);
+    if (err.code === '23505' || err.message?.includes('unique constraint')) {
+      return res.status(400).json({ error: 'A user with this employee number, phone, or email already exists.' });
+    }
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };

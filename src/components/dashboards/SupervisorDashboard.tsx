@@ -165,7 +165,7 @@ export default function SupervisorDashboard() {
          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
          body: JSON.stringify({ 
            status: decision,
-           performanceScore: decision === 'APPROVED' ? '95.00' : undefined
+           performanceScore: decision === 'APPROVED' ? 95 : undefined
          })
        });
 
