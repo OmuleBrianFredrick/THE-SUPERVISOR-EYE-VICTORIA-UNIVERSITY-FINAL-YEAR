@@ -156,15 +156,6 @@ export default function FieldStaffDashboard() {
         const { latitude, longitude } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
         
-        if (task.targetLocationLat && task.targetLocationLng) {
-          const distance = getDistanceInMeters(latitude, longitude, parseFloat(task.targetLocationLat), parseFloat(task.targetLocationLng));
-          if (distance > 50) {
-            setLocationError(`You are too far from the target location (${Math.round(distance)}m away). Must be within 50m to check in.`);
-            setCheckingInTaskId(null);
-            return;
-          }
-        }
-        
         // Geolocation checks passed. Initialize draft report if not present
         const draftReport = (reports || []).find(r => r.taskId === task.id && r.status === 'DRAFT');
         if (!draftReport) {
@@ -342,6 +333,7 @@ export default function FieldStaffDashboard() {
       case 'In Progress':
         return 'bg-amber-50 text-amber-700 border-amber-100 animate-pulse';
       case 'Awaiting Review':
+      case 'Pending Approval':
         return 'bg-purple-50 text-purple-700 border-purple-100';
       case 'Revision Requested':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -417,8 +409,8 @@ export default function FieldStaffDashboard() {
                         })
                       });
                       
-                      // Explicitly change task status to 'Awaiting Review'
-                      await handleTransitionTask(activeTask.id, 'Awaiting Review', undefined, 'Report submitted for approval review');
+                      // Explicitly change task status to 'Pending Approval'
+                      await handleTransitionTask(activeTask.id, 'Pending Approval', undefined, 'Report submitted for approval review');
                       
                       setActiveTask(null);
                       fetchData();
@@ -555,6 +547,7 @@ export default function FieldStaffDashboard() {
               <option value="Accepted">Accepted</option>
               <option value="In Progress">In Progress</option>
               <option value="Awaiting Review">Awaiting Review</option>
+              <option value="Pending Approval">Pending Approval</option>
               <option value="Revision Requested">Revision Requested</option>
               <option value="Approved">Approved</option>
               <option value="Completed">Completed</option>
@@ -871,23 +864,51 @@ export default function FieldStaffDashboard() {
                 </div>
 
                 {/* Comment Form */}
-                <form onSubmit={handleAddComment} className="flex gap-2">
-                  <input 
-                    type="text" 
-                    required
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    placeholder="Ask a question or post update..."
-                    className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-950 text-slate-850 bg-white"
-                  />
-                  <button 
-                    type="submit" 
-                    disabled={submittingComment || !newComment.trim()}
-                    className="p-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition disabled:opacity-40 shrink-0 cursor-pointer flex items-center justify-center"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                </form>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const token = await getToken();
+                          const res = await fetch(`/api/v1/tasks/${selectedDetailTask.id}/status`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ comment: '🚨 REQUEST: I am far from the check-in location. Please update the target GPS coordinates for this task.' })
+                          });
+                          if (res.ok) {
+                            const updated = await res.json();
+                            setSelectedDetailTask(updated);
+                            setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
+                            showSuccessToast('Location change request sent');
+                          }
+                        } catch (err) {
+                          showErrorToast('Failed to request location change');
+                        }
+                      }}
+                      className="flex-1 text-[10px] font-bold py-1.5 px-3 bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200 rounded-lg transition text-center cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      REQUEST GPS UPDATE
+                    </button>
+                  </div>
+                  <form onSubmit={handleAddComment} className="flex gap-2">
+                    <input 
+                      type="text" 
+                      required
+                      value={newComment}
+                      onChange={e => setNewComment(e.target.value)}
+                      placeholder="Ask a question or post update..."
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-950 text-slate-850 bg-white"
+                    />
+                    <button 
+                      type="submit" 
+                      disabled={submittingComment || !newComment.trim()}
+                      className="p-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition disabled:opacity-40 shrink-0 cursor-pointer flex items-center justify-center"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                </div>
               </div>
             </div>
 

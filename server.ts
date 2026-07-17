@@ -23,7 +23,7 @@ async function startServer() {
   app.use('/api/v1', apiRoutes);
 
   // Robust production detection: check if build artifacts exist
-  const isProduction = process.env.NODE_ENV === 'production' || fs.existsSync(path.join(process.cwd(), 'dist/index.html'));
+  const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
     const vite = await createViteServer({

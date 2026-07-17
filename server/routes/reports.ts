@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
-import { reports, evidence, tasks, users, notifications, reportVersions, reportComments, approvalChains, approvalSteps, reportApprovals } from '../db/schema.js';
+import { reports, evidence, tasks, users, notifications, reportVersions, reportComments, approvalChains, approvalSteps, reportApprovals, roles } from '../db/schema.js';
 import { eq, desc, and, or, sql } from 'drizzle-orm';
 import { logAudit } from '../services/audit.js';
 import { verifyToken } from '../middleware/auth.js';
@@ -58,7 +58,7 @@ router.get('/', async (req: any, res: any) => {
 // Submit report
 router.post('/', validate(createReportSchema), async (req: any, res: any) => {
   try {
-    const { taskId, reportType, gpsLat, gpsLng, outsideGeofence, notes } = req.body;
+    const { taskId, reportType, gpsLat, gpsLng, locationName, outsideGeofence, notes } = req.body;
     
     // Create report
     const newReport = await db.insert(reports).values({
@@ -66,6 +66,7 @@ router.post('/', validate(createReportSchema), async (req: any, res: any) => {
       reportType,
       gpsLat,
       gpsLng,
+      locationName,
       isGpsVerified: true, // we will verify later or in client
       notes,
       submitterId: req.dbUser.id,
@@ -108,7 +109,7 @@ router.post('/', validate(createReportSchema), async (req: any, res: any) => {
 router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    const { status, performanceScore, notes } = req.body; 
+    const { status, performanceScore, notes, locationName } = req.body; 
     
     // Get existing to determine version
     const existing = await db.query.reports.findFirst({
@@ -124,6 +125,7 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
     if (status) updateData.status = status;
     if (performanceScore !== undefined) updateData.performanceScore = performanceScore;
     if (notes !== undefined) updateData.notes = notes;
+    if (locationName !== undefined) updateData.locationName = locationName;
 
     const updated = await db.update(reports).set(updateData).where(eq(reports.id, id)).returning();
     
@@ -189,9 +191,18 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
             }
          } else {
             // Fallback if no chain: assign to department head (Supervisor)
-            const deptHead = await db.query.users.findFirst({
-               where: sql`${users.departmentId} = ${submitter.departmentId} AND ${users.roleId} IN (SELECT id FROM roles WHERE name = 'Supervisor')`
+            const supervisorRole = await db.query.roles.findFirst({
+               where: eq(roles.name, 'Supervisor')
             });
+            let deptHead = null;
+            if (supervisorRole && submitter.departmentId) {
+               deptHead = await db.query.users.findFirst({
+                  where: and(
+                     eq(users.departmentId, submitter.departmentId),
+                     eq(users.roleId, supervisorRole.id)
+                  )
+               });
+            }
             if (deptHead) {
                await db.insert(reportApprovals).values({
                   reportId: report.id,
@@ -206,10 +217,26 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
     if (updated.length > 0 && updated[0].taskId && status) {
        // Also update task if applicable? Schema doesn't link directly, but we can update if needed.
        let taskStatus = 'IN_PROGRESS';
-       if (status === 'APPROVED') taskStatus = 'COMPLETED';
+       let taskExtendedStatus = undefined;
+       
+       if (status === 'APPROVED') {
+         taskStatus = 'COMPLETED';
+         taskExtendedStatus = 'Completed';
+       } else if (status === 'PENDING_REVIEW') {
+         taskStatus = 'COMPLETED';
+         taskExtendedStatus = 'Pending Approval';
+       } else if (status === 'REJECTED') {
+         taskStatus = 'IN_PROGRESS';
+         taskExtendedStatus = 'Revision Requested';
+       }
+       
+       const taskUpdates: any = { status: taskStatus, updatedAt: new Date() };
+       if (taskExtendedStatus) {
+         taskUpdates.extendedStatus = taskExtendedStatus;
+       }
        
        // @ts-ignore
-       await db.update(tasks).set({ status: taskStatus, updatedAt: new Date() }).where(eq(tasks.id, updated[0].taskId));
+       await db.update(tasks).set(taskUpdates).where(eq(tasks.id, updated[0].taskId));
        
        // Notifications and Audit
        try {

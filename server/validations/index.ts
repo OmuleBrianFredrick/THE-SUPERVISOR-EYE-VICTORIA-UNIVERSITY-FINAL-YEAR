@@ -72,14 +72,31 @@ export const createTaskSchema = z.object({
   body: z.object({
     title: z.string().min(1, 'Title is required').max(255),
     description: z.string().min(1, 'Description is required'),
-    taskType: z.enum(['INSPECTION', 'MAINTENANCE', 'AUDIT', 'SURVEY', 'OTHER']),
+    taskType: z.enum(['INSPECTION', 'MAINTENANCE', 'AUDIT', 'SURVEY', 'OTHER', 'STOCK_AUDIT', 'MERCHANDISING', 'GENERAL_VISIT']),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).optional(),
     escalationLevel: z.string().optional(),
     targetLocationLat: z.number().optional(),
     targetLocationLng: z.number().optional(),
-    dueDate: z.string().datetime().or(z.date()),
+    targetLocationName: z.string().optional(),
+    dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date format" }).or(z.date()),
     assignedTo: z.string().uuid().optional(),
     category: z.string().optional(),
+    extendedStatus: z.string().optional(),
+  }),
+});
+
+export const updateTaskDetailsSchema = z.object({
+  params: z.object({
+    id: z.string().uuid(),
+  }),
+  body: z.object({
+    title: z.string().min(1, 'Title is required').max(255).optional(),
+    description: z.string().min(1, 'Description is required').optional(),
+    dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date format" }).or(z.date()).optional(),
+    targetLocationLat: z.number().nullable().optional(),
+    targetLocationLng: z.number().nullable().optional(),
+    targetLocationName: z.string().nullable().optional(),
+    assignedTo: z.string().uuid().optional(),
     extendedStatus: z.string().optional(),
   }),
 });
@@ -104,6 +121,7 @@ export const createReportSchema = z.object({
     reportType: z.enum(['FIELD_VISIT', 'INCIDENT', 'MAINTENANCE_LOG', 'COMPLIANCE_AUDIT', 'OTHER']),
     gpsLat: z.number().optional(),
     gpsLng: z.number().optional(),
+    locationName: z.string().optional(),
     outsideGeofence: z.boolean().optional(),
     notes: z.string().optional(),
   }),
@@ -117,6 +135,7 @@ export const updateReportSchema = z.object({
     status: z.enum(['DRAFT', 'PENDING_REVIEW', 'SUBMITTED', 'REJECTED', 'APPROVED']).optional(),
     performanceScore: z.number().min(0).max(100).optional(),
     notes: z.string().optional(),
+    locationName: z.string().optional(),
   }),
 });
 

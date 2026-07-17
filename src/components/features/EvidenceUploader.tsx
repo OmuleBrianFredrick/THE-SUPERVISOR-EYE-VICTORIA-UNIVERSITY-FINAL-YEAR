@@ -18,6 +18,9 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [locationName, setLocationName] = useState<string>('');
+  const [isCapturingLocation, setIsCapturingLocation] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -68,10 +71,18 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
   };
 
   const getFileHash = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      if (!window.crypto || !window.crypto.subtle) {
+        return `${file.name}-${file.size}-${file.lastModified}`;
+      }
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.warn('Hash generation failed, using fallback hash format', e);
+      return `${file.name}-${file.size}-${file.lastModified}`;
+    }
   };
 
   const generateThumbnail = (file: File): Promise<string | null> => {
@@ -95,6 +106,31 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
       img.onerror = () => resolve(null);
       img.src = URL.createObjectURL(file);
     });
+  };
+
+  const handleCaptureLocation = () => {
+    setIsCapturingLocation(true);
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      setIsCapturingLocation(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        // In a real app, you would use a reverse-geocoding service here
+        // like Google Maps API or Nominatim to get the area name.
+        // For now we just set the exact coordinates as string, 
+        // or a simulated area name.
+        setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        setIsCapturingLocation(false);
+      },
+      (err) => {
+        setError('Failed to capture location.');
+        setIsCapturingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   const handleUpload = async () => {
@@ -125,6 +161,23 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
         capturedLng = pos.coords.longitude;
       } catch (err) {
         console.warn('Geolocation failed or denied, using default coordinates');
+      }
+
+      const token = await getToken();
+
+      if (locationName) {
+        try {
+          await fetch(`/api/v1/reports/${reportId}/status`, {
+            method: 'PATCH',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ locationName })
+          });
+        } catch (e) {
+          console.error("Failed to patch location Name", e);
+        }
       }
 
       if (isOffline || !navigator.onLine || reportId.startsWith('offline_')) {
@@ -168,42 +221,49 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
           setUploading(false);
         },
         async () => {
-          // 3. Get Download URL
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          try {
+            // 3. Get Download URL
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-          // 4. Save Record to Backend
-          const token = await getToken();
-          const res = await fetch(`/api/v1/reports/${reportId}/evidence`, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              mediaUrl: downloadURL,
-              thumbnailUrl: thumbnailDataUrl || downloadURL, // Fallback
-              mediaType,
-              fileHash,
-              outsideGeofence: false, // In real app, calculate distance to task loc
-              capturedLat,
-              capturedLng,
-              capturedAt: capturedAt.toISOString()
-            })
-          });
+            // 4. Save Record to Backend
+            const token = await getToken();
+            const res = await fetch(`/api/v1/reports/${reportId}/evidence`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                mediaUrl: downloadURL,
+                thumbnailUrl: thumbnailDataUrl || downloadURL, // Fallback
+                mediaType,
+                fileHash,
+                outsideGeofence: false, // In real app, calculate distance to task loc
+                capturedLat,
+                capturedLng,
+                capturedAt: capturedAt.toISOString()
+              })
+            });
 
-          if (!res.ok) {
-            throw new Error('Failed to save evidence metadata');
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.error || 'Failed to save evidence metadata');
+            }
+
+            setSuccess(true);
+            onUploadComplete?.();
+            setTimeout(() => {
+              setFile(null);
+              setPreviewUrl(null);
+              setSuccess(false);
+              setProgress(0);
+            }, 2000);
+          } catch (err: any) {
+            console.error('Error in upload completion handling:', err);
+            setError(err.message || 'An error occurred while saving the evidence metadata.');
+          } finally {
+            setUploading(false);
           }
-
-          setSuccess(true);
-          onUploadComplete?.();
-          setTimeout(() => {
-            setFile(null);
-            setPreviewUrl(null);
-            setSuccess(false);
-            setProgress(0);
-          }, 2000);
-          setUploading(false);
         }
       );
     } catch (e: any) {
@@ -283,13 +343,31 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
           )}
 
           {!success && (
-            <button 
-              onClick={handleUpload} 
-              disabled={uploading}
-              className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:bg-slate-400"
-            >
-              {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</> : 'UPLOAD EVIDENCE'}
-            </button>
+            <>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={locationName}
+                  onChange={(e) => setLocationName(e.target.value)}
+                  placeholder="Location / Area"
+                  className="flex-1 text-xs border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-900"
+                />
+                <button 
+                  onClick={handleCaptureLocation} 
+                  disabled={isCapturingLocation}
+                  className="px-3 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 flex items-center justify-center gap-1 whitespace-nowrap"
+                >
+                  {isCapturingLocation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'SHARE GPS'}
+                </button>
+              </div>
+              <button 
+                onClick={handleUpload} 
+                disabled={uploading}
+                className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:bg-slate-400"
+              >
+                {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</> : 'UPLOAD EVIDENCE'}
+              </button>
+            </>
           )}
         </div>
       )}

@@ -46,8 +46,52 @@ export default function SupervisorDashboard() {
     category: 'Stock Count',
     priority: 'MEDIUM',
     assignedTo: '',
+    targetLocationName: '',
     dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
   });
+
+  const [isEditingTask, setIsEditingTask] = useState(false);
+  const [editTaskForm, setEditTaskForm] = useState({
+    title: '',
+    description: '',
+    dueDate: '',
+    targetLocationLat: '',
+    targetLocationLng: '',
+    targetLocationName: ''
+  });
+
+  const handleEditTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDetailTask) return;
+    try {
+      const payload: any = {
+        title: editTaskForm.title,
+        description: editTaskForm.description,
+        dueDate: new Date(editTaskForm.dueDate).toISOString()
+      };
+      if (editTaskForm.targetLocationLat) payload.targetLocationLat = parseFloat(editTaskForm.targetLocationLat);
+      if (editTaskForm.targetLocationLng) payload.targetLocationLng = parseFloat(editTaskForm.targetLocationLng);
+      if (editTaskForm.targetLocationName) payload.targetLocationName = editTaskForm.targetLocationName;
+
+      const res = await fetch(`/api/v1/tasks/${selectedDetailTask.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        showSuccessToast('Task details updated successfully');
+        const updatedTask = await res.json();
+        invalidateQueries([["tasks"]]);
+        setSelectedDetailTask({ ...selectedDetailTask, ...updatedTask });
+        setIsEditingTask(false);
+      } else {
+        const data = await res.json();
+        showErrorToast(data.error || 'Failed to update task details');
+      }
+    } catch (err: any) {
+      showErrorToast(err.message || 'Error updating task details');
+    }
+  };
 
   useEffect(() => {
     if (subordinates.length > 0 && !assignForm.assignedTo) {
@@ -77,6 +121,7 @@ export default function SupervisorDashboard() {
           category: 'Stock Count',
           priority: 'MEDIUM',
           assignedTo: subordinates[0]?.id || '',
+          targetLocationName: '',
           dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
         });
         invalidateQueries([["tasks"], ["reports"]]);
@@ -222,6 +267,7 @@ export default function SupervisorDashboard() {
       case 'In Progress':
         return 'bg-amber-50 text-amber-700 border-amber-100';
       case 'Awaiting Review':
+      case 'Pending Approval':
         return 'bg-purple-50 text-purple-700 border-purple-100 animate-pulse';
       case 'Revision Requested':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -279,7 +325,14 @@ export default function SupervisorDashboard() {
         {/* Workspace Content */}
         <div className="flex-1 md:overflow-y-auto overflow-visible p-6 space-y-6">
            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-             <h3 className="font-bold text-slate-800 mb-2">Field Notes & Logs</h3>
+             <div className="flex justify-between items-start mb-2">
+               <h3 className="font-bold text-slate-800">Field Notes & Logs</h3>
+               {selectedReport.locationName && (
+                 <span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded border border-indigo-100 uppercase tracking-wider">
+                   📍 {selectedReport.locationName}
+                 </span>
+               )}
+             </div>
              <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-lg border border-slate-100 min-h-[100px]">
                {selectedReport.notes || "No notes provided."}
              </p>
@@ -302,9 +355,9 @@ export default function SupervisorDashboard() {
           <p className="text-[10px] text-slate-500">Tasks in progress</p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200">
-          <p className="text-xs font-bold text-slate-400 uppercase">Awaiting Review</p>
+          <p className="text-xs font-bold text-slate-400 uppercase">Pending Approval</p>
           <div className="text-3xl font-black text-purple-600 mt-1 animate-pulse">
-            {tasks.filter(t => t.extendedStatus === 'Awaiting Review').length}
+            {tasks.filter(t => t.extendedStatus === 'Awaiting Review' || t.extendedStatus === 'Pending Approval').length}
           </div>
           <p className="text-[10px] text-slate-500">Submissions to grade</p>
         </div>
@@ -438,6 +491,7 @@ export default function SupervisorDashboard() {
                 <option value="Accepted">Accepted</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Awaiting Review">Awaiting Review</option>
+                <option value="Pending Approval">Pending Approval</option>
                 <option value="Revision Requested">Revision Requested</option>
                 <option value="Approved">Approved</option>
                 <option value="Completed">Completed</option>
@@ -591,6 +645,17 @@ export default function SupervisorDashboard() {
                 ></textarea>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Target Location (Area)</label>
+                <input 
+                  type="text" 
+                  value={assignForm.targetLocationName}
+                  onChange={e => setAssignForm(prev => ({ ...prev, targetLocationName: e.target.value }))}
+                  placeholder="e.g. Kampala, Mukono"
+                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Category</label>
@@ -702,13 +767,34 @@ export default function SupervisorDashboard() {
                   <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border ${getStatusBadgeStyle(selectedDetailTask.extendedStatus)}`}>
                     {selectedDetailTask.extendedStatus}
                   </span>
+                  {!isEditingTask && (
+                    <button 
+                      onClick={() => {
+                        setEditTaskForm({
+                          title: selectedDetailTask.title,
+                          description: selectedDetailTask.description,
+                          dueDate: selectedDetailTask.dueDate ? new Date(selectedDetailTask.dueDate).toISOString().split('T')[0] : '',
+                          targetLocationLat: selectedDetailTask.targetLocationLat || '',
+                          targetLocationLng: selectedDetailTask.targetLocationLng || '',
+                          targetLocationName: selectedDetailTask.targetLocationName || ''
+                        });
+                        setIsEditingTask(true);
+                      }}
+                      className="ml-2 text-[10px] font-bold bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 px-2 py-0.5 rounded transition cursor-pointer"
+                    >
+                      EDIT TASK
+                    </button>
+                  )}
                 </div>
                 <h3 className="font-extrabold text-lg tracking-tight leading-snug">{selectedDetailTask.title}</h3>
                 <p className="text-xs text-slate-400">Assigned Officer: {selectedDetailTask.assignee?.firstName} {selectedDetailTask.assignee?.lastName}</p>
               </div>
               <button 
                 type="button"
-                onClick={() => setSelectedDetailTask(null)} 
+                onClick={() => {
+                  setIsEditingTask(false);
+                  setSelectedDetailTask(null);
+                }} 
                 className="text-slate-400 hover:text-white transition text-2xl font-black leading-none p-1 cursor-pointer"
               >
                 &times;
@@ -719,34 +805,132 @@ export default function SupervisorDashboard() {
             <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-12 gap-6 min-h-0">
               {/* Left Panel: Description and Timeline */}
               <div className="md:col-span-7 space-y-5">
-                <div>
-                  <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                    <FileText className="w-3.5 h-3.5 text-slate-400" />
-                    Task Instructions
-                  </h4>
-                  <p className="text-sm text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-100 font-medium leading-relaxed">
-                    {selectedDetailTask.description}
-                  </p>
-                </div>
+                {isEditingTask ? (
+                  <form onSubmit={handleEditTaskSubmit} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Title</label>
+                      <input 
+                        required
+                        type="text" 
+                        value={editTaskForm.title}
+                        onChange={e => setEditTaskForm({...editTaskForm, title: e.target.value})}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Instructions / Description</label>
+                      <textarea 
+                        required
+                        rows={3}
+                        value={editTaskForm.description}
+                        onChange={e => setEditTaskForm({...editTaskForm, description: e.target.value})}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Due Date</label>
+                        <input 
+                          type="date" 
+                          required
+                          value={editTaskForm.dueDate}
+                          onChange={e => setEditTaskForm({...editTaskForm, dueDate: e.target.value})}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Location Name</label>
+                        <input 
+                          type="text" 
+                          value={editTaskForm.targetLocationName}
+                          onChange={e => setEditTaskForm({...editTaskForm, targetLocationName: e.target.value})}
+                          placeholder="e.g. Kampala, Mukono"
+                          className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target GPS Lat</label>
+                        <input 
+                          type="number" 
+                          step="any"
+                          value={editTaskForm.targetLocationLat}
+                          onChange={e => setEditTaskForm({...editTaskForm, targetLocationLat: e.target.value})}
+                          placeholder="Latitude"
+                          className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target GPS Lng</label>
+                        <input 
+                          type="number" 
+                          step="any"
+                          value={editTaskForm.targetLocationLng}
+                          onChange={e => setEditTaskForm({...editTaskForm, targetLocationLng: e.target.value})}
+                          placeholder="Longitude"
+                          className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsEditingTask(false)}
+                        className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100"
+                      >
+                        CANCEL
+                      </button>
+                      <button 
+                        type="submit" 
+                        className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800"
+                      >
+                        SAVE CHANGES
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        Task Instructions
+                      </h4>
+                      <p className="text-sm text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-100 font-medium leading-relaxed">
+                        {selectedDetailTask.description}
+                      </p>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Priority Level</span>
-                    <span className="text-xs font-black text-slate-800 uppercase">{selectedDetailTask.priority}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Due Date</span>
-                    <span className="text-xs font-black text-slate-800">{new Date(selectedDetailTask.dueDate).toLocaleDateString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Task Type</span>
-                    <span className="text-xs font-black text-slate-800 uppercase">{selectedDetailTask.taskType}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Assigned To</span>
-                    <span className="text-xs font-black text-slate-800">{selectedDetailTask.assignee?.firstName} {selectedDetailTask.assignee?.lastName}</span>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Priority Level</span>
+                        <span className="text-xs font-black text-slate-800 uppercase">{selectedDetailTask.priority}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Due Date</span>
+                        <span className="text-xs font-black text-slate-800">{new Date(selectedDetailTask.dueDate).toLocaleDateString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Task Type</span>
+                        <span className="text-xs font-black text-slate-800 uppercase">{selectedDetailTask.taskType}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Assigned To</span>
+                        <span className="text-xs font-black text-slate-800">{selectedDetailTask.assignee?.firstName} {selectedDetailTask.assignee?.lastName}</span>
+                      </div>
+                      {selectedDetailTask.targetLocationName && (
+                        <div className="col-span-2">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Target Location Area</span>
+                          <span className="text-xs font-black text-slate-800">{selectedDetailTask.targetLocationName}</span>
+                        </div>
+                      )}
+                      {selectedDetailTask.targetLocationLat && (
+                        <div className="col-span-2">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Target Location (GPS)</span>
+                          <span className="text-xs font-black text-slate-800">{selectedDetailTask.targetLocationLat}, {selectedDetailTask.targetLocationLng}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {/* Timeline visual audit logs */}
                 <div>
