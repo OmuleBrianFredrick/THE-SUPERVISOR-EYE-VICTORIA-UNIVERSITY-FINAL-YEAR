@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthGuard, RoleGuard } from './components/auth/AuthGuard';
@@ -100,6 +101,7 @@ export default function App() {
       </Routes>
     </AuthProvider>
     </ToastProvider>
+    <Analytics />
     </QueryClientProvider>
   );
 }
