@@ -1,10 +1,12 @@
 {
-  "projectId": "operating-limiter-7s6r9",
-  "appId": "1:142232122531:web:2d408a6067a3a42d127b16",
-  "apiKey": "AIzaSyAF58EwPdr3Iiz2PZm_Y6YcIzUYgjzjxFw",
-  "authDomain": "operating-limiter-7s6r9.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-ece35090-022e-466b-81b3-035179b36674",
-  "storageBucket": "operating-limiter-7s6r9.firebasestorage.app",
-  "messagingSenderId": "142232122531",
-  "measurementId": ""
+  "projectId": "supervisor-eye-movit",
+  "appId": "1:1083129600397:web:e1b9bed3b20e23097705c4",
+  "apiKey": "AIzaSyD0Dzu4EZrT3iVLHqwe-f8t1N7XGKqCXTw",
+  "authDomain": "supervisor-eye-movit.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-supervisoreye-ece35090-022e-466b-81b3-035179b36674",
+  "storageBucket": "supervisor-eye-movit.firebasestorage.app",
+  "messagingSenderId": "1083129600397",
+  "measurementId": "",
+  "oAuthClientId": "1083129600397-che9jdlhj8a8du1a1gmv5cg254k4fkrg.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

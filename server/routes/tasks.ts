@@ -5,6 +5,7 @@ import { eq, desc, and, or, like, ilike } from 'drizzle-orm';
 import { logAudit } from '../services/audit.js';
 import { verifyToken } from '../middleware/auth.js';
 import { validate, createTaskSchema, updateTaskStatusSchema, updateTaskDetailsSchema, getTasksSchema } from '../validations/index.js';
+import { systemEvents } from '../services/events.js';
 
 const router = Router();
 

@@ -6,6 +6,13 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 import apiRoutes from './server/routes/index.js';
 import { startWorker } from './server/services/worker.js';
+import { systemEvents } from './server/services/events.js';
+
+interface Client extends WebSocket {
+  userId?: string;
+  role?: string;
+  isAlive?: boolean;
+}
 
 async function startServer() {
   const app = express();
@@ -14,7 +21,7 @@ async function startServer() {
   // Start background processing engine
   startWorker().catch(err => console.error("Worker failed to start:", err));
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
   
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Supervisor Eye API Online' });
@@ -45,12 +52,40 @@ async function startServer() {
 
   const wss = new WebSocketServer({ server: httpServer });
 
-  wss.on('connection', (ws: WebSocket) => {
-    console.log('GIS Command Center Client connected');
+  systemEvents.on('notification', (payload) => {
+    wss.clients.forEach((client: any) => {
+       if (client.readyState === WebSocket.OPEN) {
+          // If no target role/user is specified, broadcast to all
+          const isTargetedUser = payload.targetUserId && client.userId === payload.targetUserId;
+          const isTargetedRole = payload.targetRole && client.role && client.role.toLowerCase() === payload.targetRole.toLowerCase();
+          const isBroadcast = !payload.targetUserId && !payload.targetRole;
+          
+          if (isTargetedUser || isTargetedRole || isBroadcast) {
+              client.send(JSON.stringify({ type: 'LIVE_NOTIFICATION', ...payload }));
+          }
+       }
+    });
+  });
+
+  wss.on('connection', (ws: Client) => {
+    ws.isAlive = true;
     
-    // Periodically send simulated real-time intelligence events
+    ws.on('pong', () => { ws.isAlive = true; });
+
+    ws.on('message', (msg) => {
+      try {
+        const data = JSON.parse(msg.toString());
+        if (data.type === 'AUTH') {
+           ws.userId = data.userId;
+           ws.role = data.role;
+           console.log(`WS Client Authenticated: ${ws.userId} (${ws.role})`);
+        }
+      } catch(e) {}
+    });
+    
+    // Periodically send simulated real-time intelligence events for GIS
     const interval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN && ws.role?.toLowerCase() === 'supervisor') {
         const eventTypes = ['REPORT_SUBMITTED', 'EVIDENCE_UPLOADED', 'ESCALATION_TRIGGERED', 'WORKFORCE_STATUS_CHANGE'];
         const randomType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
         
@@ -127,9 +162,19 @@ async function startServer() {
     
     ws.on('close', () => {
       clearInterval(interval);
-      console.log('GIS Command Center Client disconnected');
+      console.log(`WS Client disconnected: ${ws.userId}`);
     });
   });
+
+  const pingInterval = setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+
+  wss.on('close', () => clearInterval(pingInterval));
 }
 
 startServer().catch((err) => {

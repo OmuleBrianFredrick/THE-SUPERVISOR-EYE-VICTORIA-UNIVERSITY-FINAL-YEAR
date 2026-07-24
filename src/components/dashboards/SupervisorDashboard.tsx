@@ -7,13 +7,59 @@ import {
   Send, History, AlertCircle, FileText, Trash2, Archive, CheckSquare
 } from 'lucide-react';
 import EvidenceGallery from '../features/EvidenceGallery';
-import { generateReportPDF } from '../../lib/pdfGenerator';
+import { generateReportPDF, getReportPDFBase64 } from '../../lib/pdfGenerator';
 import { useTasksQuery, useReportsQuery, useSubordinatesQuery, useInvalidateQueries } from '../../hooks/useQueries';
 
 export default function SupervisorDashboard() {
-  const { getToken, profile } = useAuth();
+  const { getToken, profile, googleAccessToken } = useAuth();
   const { success: showSuccessToast, error: showErrorToast } = useToast();
   const invalidateQueries = useInvalidateQueries();
+  
+  const [isEmailing, setIsEmailing] = useState(false);
+
+  const handleEmailReport = async (report: any) => {
+    if (!googleAccessToken) {
+      showErrorToast("Please sign in with Google to send emails.");
+      return;
+    }
+    const toEmail = prompt("Enter recipient email address:");
+    if (!toEmail) return;
+
+    setIsEmailing(true);
+    showSuccessToast("Generating PDF and sending email...");
+    try {
+      const pdfBase64 = await getReportPDFBase64(report);
+      const token = await getToken();
+      
+      const res = await fetch('/api/v1/gmail/send-report', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          to: toEmail,
+          subject: `Supervisor Eye Report: ${report.task?.title || report.reportType}`,
+          message: `Please find the attached audit report submitted by ${report.submitter?.firstName || ''} ${report.submitter?.lastName || ''}.\n\nSupervisor Eye System`,
+          pdfBase64,
+          filename: `Audit_Report_${report.id?.substring(0, 8) || 'Export'}.pdf`,
+          googleAccessToken
+        })
+      });
+      
+      if (res.ok) {
+        showSuccessToast("Report emailed successfully!");
+      } else {
+        const err = await res.json();
+        showErrorToast(err.error || "Failed to send email");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showErrorToast("Failed to email report.");
+    } finally {
+      setIsEmailing(false);
+    }
+  };
   
   const { data: tasksResponse, isLoading: loadingTasks } = useTasksQuery();
   const { data: reportsResponse, isLoading: loadingReports } = useReportsQuery();
@@ -300,6 +346,7 @@ export default function SupervisorDashboard() {
           </div>
           <div className="flex gap-2">
              <button onClick={() => generateReportPDF(selectedReport)} className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 flex items-center gap-2 cursor-pointer"><Download className="w-4 h-4" /> EXPORT PDF</button>
+             <button disabled={isEmailing} onClick={() => handleEmailReport(selectedReport)} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2 cursor-pointer disabled:opacity-50"><Send className="w-4 h-4" /> {isEmailing ? 'SENDING...' : 'EMAIL REPORT'}</button>
              {selectedReport.status !== 'APPROVED' && (
                <>
                  <button 

@@ -13,8 +13,10 @@ import { getStorage, ref as realRef, uploadBytesResumable as realUploadBytesResu
 import { getFirestore } from 'firebase/firestore';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 
-// Set to true to disable real Firebase Auth and force developer mock authentication
-const DISABLE_REAL_FIREBASE = true;
+// Option A: Environment Switch for Mock Data Protection
+// In Development (AI Studio Preview), we force mock authentication to preserve the testing flow.
+// In Production (Deployed), we use the real Firebase Auth.
+const DISABLE_REAL_FIREBASE = import.meta.env.DEV;
 
 const hasApiKey = !DISABLE_REAL_FIREBASE && ((!!import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== '""') || (!!firebaseAppletConfig?.apiKey && firebaseAppletConfig.apiKey !== ""));
 
@@ -99,6 +101,8 @@ if (hasApiKey) {
     auth = getAuth(app);
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: 'select_account' });
+    googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+    googleProvider.addScope('https://www.googleapis.com/auth/gmail.readonly');
     storage = getStorage(app);
     db = getFirestore(app);
   } catch (error) {

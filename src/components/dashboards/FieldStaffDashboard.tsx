@@ -44,6 +44,7 @@ export default function FieldStaffDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState<any | null>(null);
   const [notes, setNotes] = useState('');
+  const [overrideGeofence, setOverrideGeofence] = useState(false);
   
   // Advanced filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -398,16 +399,23 @@ export default function FieldStaffDashboard() {
                     
                     try {
                       const token = await getToken();
-                      await fetch(`/api/v1/reports/${draftReport.id}/status`, {
+                      const res = await fetch(`/api/v1/reports/${draftReport.id}/status`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                         body: JSON.stringify({ 
                           status: 'PENDING_REVIEW', 
                           notes,
                           gpsLat: currentLocation?.lat,
-                          gpsLng: currentLocation?.lng
+                          gpsLng: currentLocation?.lng,
+                          overrideGeofence
                         })
                       });
+                      
+                      if (!res.ok) {
+                        const err = await res.json();
+                        showErrorToast(err.error || 'Failed to submit report. Please check Geofence.');
+                        return;
+                      }
                       
                       // Explicitly change task status to 'Pending Approval'
                       await handleTransitionTask(activeTask.id, 'Pending Approval', undefined, 'Report submitted for approval review');
@@ -477,6 +485,18 @@ export default function FieldStaffDashboard() {
                       }
                    }}
                 ></textarea>
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+                   <input 
+                     type="checkbox" 
+                     id="overrideGeofence"
+                     checked={overrideGeofence}
+                     onChange={e => setOverrideGeofence(e.target.checked)}
+                     className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                   />
+                   <label htmlFor="overrideGeofence" className="text-xs font-bold text-slate-600 cursor-pointer">
+                     Bypass Geofence Verification (Testing Only)
+                   </label>
+                </div>
               </div>
               <EvidenceGallery evidenceList={draftReport.evidence || []} />
             </div>

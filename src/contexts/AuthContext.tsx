@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, firebaseSignOut, googleProvider, signInWithPopup, sendPasswordResetEmail, onAuthStateChanged } from '../lib/firebase';
-import { User } from 'firebase/auth';
+import { User, GoogleAuthProvider } from 'firebase/auth';
 
 interface AuthProfile {
   id: string;
@@ -35,9 +35,12 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<void>;
   setProfileForce: (profile: AuthProfile) => void;
   refreshProfile: () => Promise<void>;
+  googleAccessToken: string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+
+let cachedAccessToken: string | null = null;
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -47,6 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [requiresOnboarding, setRequiresOnboarding] = useState(false);
   const [accountStatus, setAccountStatus] = useState<string | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   const fetchProfileData = async (user: User) => {
     try {
@@ -115,6 +119,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch(e) {}
     await firebaseSignOut(auth);
+    cachedAccessToken = null;
+    setGoogleAccessToken(null);
     setProfile(null);
     setRequiresOnboarding(false);
     setAccountStatus(null);
@@ -128,6 +134,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signInWithGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      try {
+        const credential = GoogleAuthProvider.credentialFromResult(result as import('firebase/auth').UserCredential);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+          setGoogleAccessToken(cachedAccessToken);
+        }
+      } catch (e) {
+        console.warn("Failed to extract Google OAuth token", e);
+      }
       return result;
     } catch (error) {
       console.error("Google Sign-In Error:", error);
@@ -158,7 +173,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       signInWithGoogle,
       resetPassword,
       setProfileForce, 
-      refreshProfile 
+      refreshProfile,
+      googleAccessToken
     }}>
       {children}
     </AuthContext.Provider>

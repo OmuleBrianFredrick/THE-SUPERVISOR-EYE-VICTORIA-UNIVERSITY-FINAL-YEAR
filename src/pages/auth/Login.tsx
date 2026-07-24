@@ -68,8 +68,27 @@ export default function Login() {
 
 
 
+  const demoAccountsList = [
+    { label: 'CEO — Executive', email: 'james.munene@movitgroup.com' },
+    { label: 'Managing Director — Executive', email: 'simpson.birungi@movitgroup.com' },
+    { label: 'Operations Director — Executive', email: 'bruce.mpamizo@movitgroup.com' },
+    { label: 'Finance Director — Executive', email: 'adard.mukiibi@movitgroup.com' },
+    { label: 'HR Director — Executive', email: 'evelyn.atieno@movitgroup.internal' },
+    { label: 'Sales Manager — Manager', email: 'john.kato@movitgroup.internal' },
+    { label: 'Distribution Manager — Manager', email: 'ronald.mayanja@movitgroup.internal' },
+    { label: 'Sales Supervisor — Supervisor', email: 'samuel.okello@movitgroup.internal' },
+    { label: 'Distribution Supervisor — Supervisor', email: 'mukasa.onyango@movitgroup.internal' },
+    { label: 'Field Staff Officer — Field Staff', email: 'wasswa.robinson@movitgroup.internal' },
+    { label: 'Platform Owner — Super Admin', email: 'christianekarel@gmail.com' },
+  ];
+
+  const handleSelectDemoUser = (selectedEmail: string) => {
+    setEmail(selectedEmail);
+    setPassword('Password123!');
+  };
+
   return (
-    <div className="flex h-screen bg-slate-50 items-center justify-center p-4 font-sans relative">
+    <div className="flex h-screen bg-slate-50 items-center justify-center p-4 font-sans relative overflow-y-auto">
       <button 
         onClick={() => navigate('/')} 
         className="absolute top-6 left-6 flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors"
@@ -77,7 +96,7 @@ export default function Login() {
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 
-      <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-sm my-auto">
         <div className="flex justify-center mb-6">
           <img src="/logo.png" alt="Supervisor Eye Logo" className="h-48 w-auto object-contain" />
         </div>
@@ -87,6 +106,29 @@ export default function Login() {
             {error}
           </div>
         )}
+
+        {/* Quick Demo Login Selector */}
+        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <label className="block text-xs font-bold text-amber-900 uppercase mb-1.5 flex items-center justify-between">
+            <span>⚡ Demo Hierarchy Login Picker</span>
+            <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-medium">18 Accounts Synced</span>
+          </label>
+          <select 
+            onChange={(e) => e.target.value && handleSelectDemoUser(e.target.value)}
+            className="w-full text-xs bg-white border border-amber-300 rounded-lg p-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            defaultValue=""
+          >
+            <option value="" disabled>Select a demo role to auto-fill credentials...</option>
+            {demoAccountsList.map((acc) => (
+              <option key={acc.email} value={acc.email}>
+                {acc.label} ({acc.email})
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-amber-700 mt-1 font-sans">
+            Password auto-fills as <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-mono font-bold">Password123!</code>
+          </p>
+        </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div>
