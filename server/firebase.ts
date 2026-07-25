@@ -27,6 +27,25 @@ const createMockAuthClient = () => {
         } catch (e) {
           console.error("Failed to parse dynamic mock token:", e);
         }
+      } else if (token && token.split('.').length === 3) {
+        // It's a real JWT but we don't have a service account to verify the signature.
+        // We will just decode the payload to extract the uid and email.
+        try {
+          const payloadBase64 = token.split('.')[1];
+          // Base64Url decode
+          const normalizedBase64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+          const decoded = Buffer.from(normalizedBase64, 'base64').toString('utf8');
+          const payload = JSON.parse(decoded);
+          if (payload.user_id || payload.sub) {
+             return {
+               uid: payload.user_id || payload.sub || 'mock-uid-123',
+               email: payload.email || 'christianekarel@gmail.com',
+               email_verified: payload.email_verified ?? true,
+             };
+          }
+        } catch (e) {
+          console.error("Failed to parse real JWT payload in mock mode:", e);
+        }
       }
       return {
         uid: 'mock-uid-123',

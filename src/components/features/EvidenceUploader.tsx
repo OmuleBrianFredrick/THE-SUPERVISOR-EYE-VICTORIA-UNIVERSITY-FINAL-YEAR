@@ -6,7 +6,7 @@ import { enqueueSync } from '../../lib/syncQueue';
 
 interface EvidenceUploaderProps {
   reportId: string;
-  onUploadComplete?: () => void;
+  onUploadComplete?: (newEvidence?: any) => void;
 }
 
 export default function EvidenceUploader({ reportId, onUploadComplete }: EvidenceUploaderProps) {
@@ -250,8 +250,9 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
               throw new Error(errData.error || 'Failed to save evidence metadata');
             }
 
+            const newEv = await res.json();
             setSuccess(true);
-            onUploadComplete?.();
+            onUploadComplete?.(newEv);
             setTimeout(() => {
               setFile(null);
               setPreviewUrl(null);

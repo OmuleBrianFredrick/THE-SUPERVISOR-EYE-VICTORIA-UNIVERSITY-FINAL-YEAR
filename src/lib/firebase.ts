@@ -16,9 +16,7 @@ import firebaseAppletConfig from '../../firebase-applet-config.json';
 // Option A: Environment Switch for Mock Data Protection
 // In Development (AI Studio Preview), we force mock authentication to preserve the testing flow.
 // In Production (Deployed), we use the real Firebase Auth.
-const DISABLE_REAL_FIREBASE = import.meta.env.DEV;
-
-const hasApiKey = !DISABLE_REAL_FIREBASE && ((!!import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== '""') || (!!firebaseAppletConfig?.apiKey && firebaseAppletConfig.apiKey !== ""));
+const hasApiKey = (!!import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_API_KEY !== '""') || (!!firebaseAppletConfig?.apiKey && firebaseAppletConfig.apiKey !== "");
 
 let app: any = null;
 let auth: any = null;

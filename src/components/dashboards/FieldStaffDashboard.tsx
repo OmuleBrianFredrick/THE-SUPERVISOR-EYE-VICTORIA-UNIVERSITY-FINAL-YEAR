@@ -43,6 +43,7 @@ export default function FieldStaffDashboard() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTask, setActiveTask] = useState<any | null>(null);
+  const [activeReport, setActiveReport] = useState<any | null>(null);
   const [notes, setNotes] = useState('');
   const [overrideGeofence, setOverrideGeofence] = useState(false);
   
@@ -109,17 +110,28 @@ export default function FieldStaffDashboard() {
 
       if (navigator.onLine) {
          const [tRes, rRes] = await Promise.all([
-           fetch('/api/v1/tasks', { headers: { Authorization: `Bearer ${token}` } }),
-           fetch('/api/v1/reports', { headers: { Authorization: `Bearer ${token}` } })
+           fetch('/api/v1/tasks?limit=200', { headers: { Authorization: `Bearer ${token}` } }),
+           fetch('/api/v1/reports?limit=200', { headers: { Authorization: `Bearer ${token}` } })
          ]);
          if (tRes.ok && rRes.ok) {
             const tasksData = await tRes.json();
             const reportsResponse = await rRes.json();
             const reportsData = reportsResponse.data || reportsResponse;
-            setTasks(tasksData);
-            setReports(reportsData);
-            await cacheTasks(tasksData);
-            await cacheReports(reportsData);
+            const parsedTasks = Array.isArray(tasksData) ? tasksData : (tasksData.data || []);
+            const parsedReports = Array.isArray(reportsData) ? reportsData : [];
+            setTasks(parsedTasks);
+            setReports(parsedReports);
+
+            // Sync activeReport with fresh backend data if activeTask is running
+            if (activeTask) {
+              const freshReport = parsedReports.find((r: any) => r.taskId === activeTask.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
+              if (freshReport) {
+                setActiveReport(prev => prev ? { ...freshReport, evidence: freshReport.evidence || prev.evidence } : freshReport);
+              }
+            }
+
+            await cacheTasks(parsedTasks);
+            await cacheReports(parsedReports);
             setIsOffline(false);
          } else {
             throw new Error('API request failed');
@@ -158,7 +170,7 @@ export default function FieldStaffDashboard() {
         setCurrentLocation({ lat: latitude, lng: longitude });
         
         // Geolocation checks passed. Initialize draft report if not present
-        const draftReport = (reports || []).find(r => r.taskId === task.id && r.status === 'DRAFT');
+        let draftReport = (reports || []).find(r => r.taskId === task.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
         if (!draftReport) {
           if (navigator.onLine && !isOffline) {
             try {
@@ -174,13 +186,14 @@ export default function FieldStaffDashboard() {
                 })
               });
               if (res.ok) {
-                await fetchData();
+                draftReport = await res.json();
+                setReports(prev => [draftReport, ...(prev || [])]);
               } else {
                 throw new Error('Failed to create online draft');
               }
             } catch(e) {
                console.log('Failed to create draft online, falling back to offline draft', e);
-               const localDraft = {
+               draftReport = {
                  id: `offline_${task.id}`,
                  taskId: task.id,
                  status: 'DRAFT',
@@ -190,12 +203,12 @@ export default function FieldStaffDashboard() {
                  notes: '',
                  isOffline: true
                };
-               const newReports = [...reports, localDraft];
+               const newReports = [...reports, draftReport];
                setReports(newReports);
                await cacheReports(newReports);
             }
           } else {
-             const localDraft = {
+             draftReport = {
                id: `offline_${task.id}`,
                taskId: task.id,
                status: 'DRAFT',
@@ -205,13 +218,14 @@ export default function FieldStaffDashboard() {
                notes: '',
                isOffline: true
              };
-             const newReports = [...reports, localDraft];
+             const newReports = [...reports, draftReport];
              setReports(newReports);
              await cacheReports(newReports);
           }
         }
         
         setCheckingInTaskId(null);
+        setActiveReport(draftReport);
         setActiveTask(task);
         showSuccessToast(`Successfully checked in! Executing "${task.title}"`);
       },
@@ -352,17 +366,45 @@ export default function FieldStaffDashboard() {
   if (loading) return <div className="p-8 flex justify-center text-slate-400"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
 
   if (activeTask) {
-    const draftReport = (reports || []).find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
+    const draftReport = activeReport || (reports || []).find(r => r.taskId === activeTask.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
     
     if (!draftReport) {
-       return <div className="p-8 flex justify-center text-slate-400"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
+       return (
+         <div className="p-8 flex flex-col items-center justify-center gap-4 text-slate-500 bg-white rounded-2xl border border-slate-200">
+           <RefreshCw className="w-8 h-8 animate-spin text-slate-400" />
+           <p className="text-sm font-semibold">Initializing task execution session...</p>
+           <button onClick={() => { setActiveTask(null); setActiveReport(null); }} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition cursor-pointer">
+             Return to Tasks
+           </button>
+         </div>
+       );
     }
+
+    const handleEvidenceUploaded = (newEvidence?: any) => {
+      if (newEvidence) {
+        setActiveReport(prev => {
+          if (!prev) return prev;
+          const currentEv = prev.evidence || [];
+          if (currentEv.some((e: any) => e.id === newEvidence.id)) return prev;
+          return { ...prev, evidence: [...currentEv, newEvidence] };
+        });
+        setReports(prev => (prev || []).map(r => {
+          if (r.id === draftReport.id) {
+            const currentEv = r.evidence || [];
+            if (currentEv.some((e: any) => e.id === newEvidence.id)) return r;
+            return { ...r, evidence: [...currentEv, newEvidence] };
+          }
+          return r;
+        }));
+      }
+      fetchData();
+    };
 
     return (
       <div className="flex flex-col h-full bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden animate-fadeIn">
         <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-4">
-             <button onClick={() => setActiveTask(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
+             <button onClick={() => { setActiveTask(null); setActiveReport(null); }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer">
                <ChevronLeft className="w-5 h-5" />
              </button>
              <div>
@@ -394,6 +436,8 @@ export default function FieldStaffDashboard() {
                           status: 'PENDING_REVIEW'
                        });
                        setActiveTask(null);
+                       setActiveReport(null);
+                       showSuccessToast('Offline report submitted for review!');
                        return;
                     }
                     
@@ -405,8 +449,8 @@ export default function FieldStaffDashboard() {
                         body: JSON.stringify({ 
                           status: 'PENDING_REVIEW', 
                           notes,
-                          gpsLat: currentLocation?.lat,
-                          gpsLng: currentLocation?.lng,
+                          gpsLat: currentLocation?.lat || draftReport.gpsLat,
+                          gpsLng: currentLocation?.lng || draftReport.gpsLng,
                           overrideGeofence
                         })
                       });
@@ -420,10 +464,13 @@ export default function FieldStaffDashboard() {
                       // Explicitly change task status to 'Pending Approval'
                       await handleTransitionTask(activeTask.id, 'Pending Approval', undefined, 'Report submitted for approval review');
                       
+                      showSuccessToast('Work successfully submitted for review!');
                       setActiveTask(null);
+                      setActiveReport(null);
                       fetchData();
                     } catch(e) {
                        console.error('Submit failed', e);
+                       showErrorToast('Failed to submit work for review.');
                     }
                   };
                   await submit();
@@ -502,7 +549,7 @@ export default function FieldStaffDashboard() {
             </div>
             
             <div className="w-full md:w-80">
-              <EvidenceUploader reportId={draftReport.id} onUploadComplete={fetchData} />
+              <EvidenceUploader reportId={draftReport.id} onUploadComplete={handleEvidenceUploaded} />
             </div>
         </div>
       </div>

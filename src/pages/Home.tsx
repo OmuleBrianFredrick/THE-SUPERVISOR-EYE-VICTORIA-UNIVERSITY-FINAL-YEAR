@@ -308,7 +308,7 @@ export default function Home() {
                 "Welcome to the new era of Movit operations. Supervisor Eye gives us the clarity and accountability needed to maintain our position as industry leaders across Africa."
               </blockquote>
               <div>
-                <div className="font-bold text-lg">Omule Brian Fredrick.</div>
+                <div className="font-bold text-lg">Bruce Mpamiso.</div>
                 <div className="text-slate-400 text-sm">Group Executive Office</div>
               </div>
             </div>
@@ -350,7 +350,7 @@ export default function Home() {
                 email: 'danielmale62@gmail.com',
                 phone: '+256 772614374',
                 initials: 'MJ',
-                imageUrl: 'male.jpg'
+                imageUrl: 'male.jpeg'
               },
               {
                 name: 'Gordon Koang Bol',
@@ -366,7 +366,7 @@ export default function Home() {
                 email: 'kisajohnmark@gmail.com',
                 phone: '+256 756681514',
                 initials: 'KM',
-                imageUrl: 'mark.jpg' 
+                imageUrl: 'mark.jpeg' 
               }
             ].map((member, i) => (
               <div key={i} className="bg-white rounded-2xl p-6 shadow-xl border border-slate-100 hover:shadow-2xl transition-shadow text-center">
