@@ -2,6 +2,8 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
+  setPersistence,
+  browserSessionPersistence,
   signInWithPopup as realSignInWithPopup, 
   signInWithEmailAndPassword as realSignInWithEmailAndPassword, 
   createUserWithEmailAndPassword as realCreateUserWithEmailAndPassword, 
@@ -97,6 +99,10 @@ if (hasApiKey) {
   try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
+    
+    // Force session persistence during development so opening new tabs requires a fresh login
+    setPersistence(auth, browserSessionPersistence).catch(console.error);
+
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: 'select_account' });
     googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');

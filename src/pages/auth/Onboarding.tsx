@@ -56,7 +56,16 @@ export default function Onboarding() {
   const [fetchingLists, setFetchingLists] = useState(true);
   
   const navigate = useNavigate();
-  const { currentUser, loading: authLoading, requiresOnboarding, accountStatus, getToken, refreshProfile } = useAuth();
+  const { currentUser, loading: authLoading, requiresOnboarding, accountStatus, getToken, refreshProfile, logout } = useAuth();
+
+  const handleCancelOnboarding = async () => {
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      console.error("Failed to cancel onboarding:", err);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading) {
@@ -491,17 +500,24 @@ export default function Onboarding() {
 
             {/* Stepper Buttons */}
             <div className="flex items-center justify-between pt-6 border-t border-slate-100">
-              {currentStep > 1 ? (
+              <div className="flex items-center gap-4">
+                {currentStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-600 font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Back
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handlePrevStep}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-600 font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  onClick={handleCancelOnboarding}
+                  className="text-xs font-bold text-slate-400 hover:text-rose-600 transition-colors px-2 py-1"
                 >
-                  <ArrowLeft className="w-4 h-4" /> Back
+                  Cancel Onboarding
                 </button>
-              ) : (
-                <div />
-              )}
+              </div>
 
               {currentStep < 3 ? (
                 <button
