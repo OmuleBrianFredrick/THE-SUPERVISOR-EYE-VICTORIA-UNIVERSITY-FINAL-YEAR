@@ -4,7 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { 
   CheckCircle2, Circle, Clock, MapPin, AlertCircle, RefreshCw, 
   ChevronLeft, Save, WifiOff, MessageSquare, Search, Filter, 
-  History, Send, ArrowRight, Clipboard, Tag, Calendar, User, Eye
+  History, Send, ArrowRight, Clipboard, Tag, Calendar, User, Eye, RotateCcw
 } from 'lucide-react';
 import EvidenceUploader from '../features/EvidenceUploader';
 import EvidenceGallery from '../features/EvidenceGallery';
@@ -126,7 +126,22 @@ export default function FieldStaffDashboard() {
             if (activeTask) {
               const freshReport = parsedReports.find((r: any) => r.taskId === activeTask.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
               if (freshReport) {
-                setActiveReport(prev => prev ? { ...freshReport, evidence: freshReport.evidence || prev.evidence } : freshReport);
+                setActiveReport(prev => {
+                  if (!prev) return freshReport;
+                  const prevEvidence = prev.evidence || [];
+                  const freshEvidence = freshReport.evidence || [];
+                  // Merge evidence items by ID or fileHash to ensure no uploaded evidence is lost
+                  const mergedMap = new Map();
+                  [...prevEvidence, ...freshEvidence].forEach((ev: any) => {
+                    const key = ev.id || ev.fileHash || ev.mediaUrl;
+                    if (key) mergedMap.set(key, ev);
+                  });
+                  return {
+                    ...freshReport,
+                    evidence: Array.from(mergedMap.values()),
+                    notes: prev.notes || freshReport.notes || ''
+                  };
+                });
               }
             }
 
@@ -155,6 +170,11 @@ export default function FieldStaffDashboard() {
   }, []);
 
   const handleExecuteTask = async (task: any) => {
+    if (['Pending Approval', 'Awaiting Review', 'Approved', 'Completed'].includes(task.extendedStatus)) {
+      showErrorToast(`This task is ${task.extendedStatus.toLowerCase()} and cannot be modified.`);
+      return;
+    }
+
     setLocationError(null);
     setCheckingInTaskId(task.id);
     
@@ -312,14 +332,12 @@ export default function FieldStaffDashboard() {
 
   useEffect(() => {
     if (activeTask) {
-       const draft = (reports || []).find(r => r.taskId === activeTask.id && r.status === 'DRAFT');
-       if (draft) {
-          setNotes(draft.notes || '');
-       } else {
-          setNotes('');
-       }
+       const draft = (reports || []).find(r => r.taskId === activeTask.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
+       setNotes(draft?.notes || '');
+    } else {
+       setNotes('');
     }
-  }, [activeTask, reports]);
+  }, [activeTask?.id]);
 
   // Filters logic
   const filteredTasks = (tasks || []).filter(t => {
@@ -334,7 +352,7 @@ export default function FieldStaffDashboard() {
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const pendingTasks = filteredTasks.filter(t => t.status === 'PENDING' || t.status === 'IN_PROGRESS');
+  const pendingTasks = filteredTasks.filter(t => t.extendedStatus !== 'Archived');
   const rejectedReports = (reports || []).filter(r => r.status === 'REJECTED');
 
   const getStatusBadgeStyle = (status: string) => {
@@ -381,23 +399,23 @@ export default function FieldStaffDashboard() {
     }
 
     const handleEvidenceUploaded = (newEvidence?: any) => {
+      showSuccessToast("Evidence uploaded successfully! Click 'SUBMIT WORK FOR REVIEW' above to send for approval.");
       if (newEvidence) {
         setActiveReport(prev => {
           if (!prev) return prev;
           const currentEv = prev.evidence || [];
-          if (currentEv.some((e: any) => e.id === newEvidence.id)) return prev;
+          if (currentEv.some((e: any) => (e.id && e.id === newEvidence.id) || (e.fileHash && e.fileHash === newEvidence.fileHash))) return prev;
           return { ...prev, evidence: [...currentEv, newEvidence] };
         });
         setReports(prev => (prev || []).map(r => {
-          if (r.id === draftReport.id) {
+          if (r && draftReport && r.id === draftReport.id) {
             const currentEv = r.evidence || [];
-            if (currentEv.some((e: any) => e.id === newEvidence.id)) return r;
+            if (currentEv.some((e: any) => (e.id && e.id === newEvidence.id) || (e.fileHash && e.fileHash === newEvidence.fileHash))) return r;
             return { ...r, evidence: [...currentEv, newEvidence] };
           }
           return r;
         }));
       }
-      fetchData();
     };
 
     return (
@@ -474,7 +492,7 @@ export default function FieldStaffDashboard() {
                     }
                   };
                   await submit();
-              }} className="bg-slate-900 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 flex items-center gap-2 cursor-pointer shadow">
+              }} id="submit-work-btn" className="bg-slate-900 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 flex items-center gap-2 cursor-pointer shadow">
                <Save className="w-4 h-4" /> SUBMIT WORK FOR REVIEW
              </button>
           </div>
@@ -552,6 +570,24 @@ export default function FieldStaffDashboard() {
               <EvidenceUploader reportId={draftReport.id} onUploadComplete={handleEvidenceUploaded} />
             </div>
         </div>
+
+        {draftReport.evidence && draftReport.evidence.length > 0 && (
+          <div className="bg-emerald-600 text-white px-5 py-2.5 text-xs font-bold flex items-center justify-between shrink-0 shadow-sm animate-fadeIn border-t border-emerald-500">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
+              <span>Evidence Upload Complete ({draftReport.evidence.length} file{draftReport.evidence.length > 1 ? 's' : ''}). Explicit Action Required: Click <span className="underline uppercase tracking-wider font-black text-white">"SUBMIT WORK FOR REVIEW"</span> above to complete your submission.</span>
+            </div>
+            <button 
+              onClick={() => {
+                const submitBtn = document.getElementById('submit-work-btn');
+                if (submitBtn) submitBtn.click();
+              }}
+              className="bg-white text-emerald-800 hover:bg-emerald-50 px-3.5 py-1 rounded-md text-[11px] font-black cursor-pointer transition shadow-xs whitespace-nowrap ml-3"
+            >
+              SUBMIT NOW
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -701,7 +737,7 @@ export default function FieldStaffDashboard() {
                       </button>
                     )}
 
-                    {(t.extendedStatus === 'In Progress' || t.extendedStatus === 'Revision Requested') && (
+                    {t.extendedStatus === 'In Progress' && (
                       <button 
                         onClick={() => handleExecuteTask(t)} 
                         disabled={checkingInTaskId === t.id}
@@ -713,6 +749,32 @@ export default function FieldStaffDashboard() {
                           'EXECUTE & UPLOAD'
                         )}
                       </button>
+                    )}
+
+                    {t.extendedStatus === 'Revision Requested' && (
+                      <button 
+                        onClick={() => handleExecuteTask(t)} 
+                        disabled={checkingInTaskId === t.id}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        {checkingInTaskId === t.id ? (
+                          <><RefreshCw className="w-3 h-3 animate-spin" /> CHECKING IN...</>
+                        ) : (
+                          <><RotateCcw className="w-3.5 h-3.5" /> RE-EXECUTE & REVISE</>
+                        )}
+                      </button>
+                    )}
+
+                    {(t.extendedStatus === 'Pending Approval' || t.extendedStatus === 'Awaiting Review') && (
+                      <span className="px-3.5 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-black rounded-lg flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-purple-600" /> SUBMITTED FOR REVIEW
+                      </span>
+                    )}
+
+                    {(t.extendedStatus === 'Approved' || t.extendedStatus === 'Completed') && (
+                      <span className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black rounded-lg flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> APPROVED & COMPLETED
+                      </span>
                     )}
                   </div>
                 </div>

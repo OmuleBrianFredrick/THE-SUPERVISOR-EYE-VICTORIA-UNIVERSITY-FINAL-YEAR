@@ -339,19 +339,18 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req: any, r
         
         if (isFieldStaff) {
           // Field staff permitted actions
-          if (extendedStatus === 'Accepted' && current !== 'Assigned') isValidTransition = false;
-          else if (extendedStatus === 'In Progress' && current !== 'Accepted' && current !== 'Revision Requested') isValidTransition = false;
-          else if (['Awaiting Review', 'Pending Approval'].includes(extendedStatus) && !['In Progress', 'Revision Requested'].includes(current)) isValidTransition = false;
+          if (extendedStatus === 'Accepted' && !['Assigned', 'Draft', 'Accepted'].includes(current)) isValidTransition = false;
+          else if (extendedStatus === 'In Progress' && !['Accepted', 'Assigned', 'In Progress', 'Revision Requested'].includes(current)) isValidTransition = false;
+          else if (['Awaiting Review', 'Pending Approval'].includes(extendedStatus) && !['In Progress', 'Accepted', 'Revision Requested', 'Awaiting Review', 'Pending Approval'].includes(current)) isValidTransition = false;
           else if (!['Accepted', 'In Progress', 'Awaiting Review', 'Pending Approval'].includes(extendedStatus)) {
             isValidTransition = false;
           }
         } else {
           // Supervisors, Admins, Executives permitted actions
-          if (extendedStatus === 'Assigned' && current !== 'Draft') isValidTransition = false;
-          else if (extendedStatus === 'Approved' && !['Awaiting Review', 'Pending Approval'].includes(current)) isValidTransition = false;
-          else if (extendedStatus === 'Revision Requested' && !['Awaiting Review', 'Pending Approval'].includes(current)) isValidTransition = false;
-          else if (extendedStatus === 'Completed' && current !== 'Approved') isValidTransition = false;
-          else if (extendedStatus === 'Archived' && !['Completed', 'Approved', 'Archived', 'Revision Requested'].includes(current)) isValidTransition = false;
+          if (extendedStatus === 'Assigned' && !['Draft', 'Assigned'].includes(current)) isValidTransition = false;
+          else if (['Approved', 'Completed'].includes(extendedStatus) && !['Awaiting Review', 'Pending Approval', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
+          else if (extendedStatus === 'Revision Requested' && !['Awaiting Review', 'Pending Approval', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
+          else if (extendedStatus === 'Archived' && !['Completed', 'Approved', 'Archived', 'Revision Requested', 'In Progress'].includes(current)) isValidTransition = false;
         }
         
         if (!isValidTransition) {
@@ -419,6 +418,20 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req: any, r
           notifMsg = `Your task submission for "${existingTask.title}" has been approved!`;
         }
         
+        if (recipientId) {
+          try {
+            await db.insert(notifications).values({
+              userId: recipientId,
+              notificationType: notifType,
+              title: notifTitle,
+              message: notifMsg,
+              isRead: false
+            });
+          } catch (dbe) {
+            console.error('Failed to insert DB notification', dbe);
+          }
+        }
+
         const { enqueueJob } = await import('../services/queue.js');
         await enqueueJob({
            queueName: 'notifications',

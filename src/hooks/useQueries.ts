@@ -39,6 +39,7 @@ export function useTasksQuery() {
       const token = await getToken();
       return fetchWithAuth('/api/v1/tasks', token);
     },
+    refetchInterval: 5000,
   });
 }
 
@@ -62,6 +63,7 @@ export function useReportsQuery(params?: any) {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return fetchWithAuth(`/api/v1/reports${qs}`, token);
     },
+    refetchInterval: 5000,
   });
 }
 
@@ -97,6 +99,7 @@ export function useExecutiveSummaryQuery() {
       const token = await getToken();
       return fetchWithAuth('/api/v1/analytics/executive-summary', token);
     },
+    refetchInterval: 10000,
   });
 }
 

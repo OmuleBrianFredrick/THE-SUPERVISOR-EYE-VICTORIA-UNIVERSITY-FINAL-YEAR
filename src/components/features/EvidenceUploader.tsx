@@ -165,7 +165,7 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
 
       const token = await getToken();
 
-      if (locationName) {
+      if (locationName && !reportId.startsWith('offline_')) {
         try {
           await fetch(`/api/v1/reports/${reportId}/status`, {
             method: 'PATCH',
@@ -330,7 +330,7 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
               ) : uploading ? (
                 <span className="text-xs font-bold text-slate-600">{Math.round(progress)}%</span>
               ) : (
-                <button onClick={() => { setFile(null); setPreviewUrl(null); }} className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <button type="button" onClick={() => { setFile(null); setPreviewUrl(null); }} className="p-1 hover:bg-slate-200 rounded text-slate-500">
                   <X className="w-5 h-5" />
                 </button>
               )}
@@ -354,6 +354,7 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
                   className="flex-1 text-xs border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-900"
                 />
                 <button 
+                  type="button"
                   onClick={handleCaptureLocation} 
                   disabled={isCapturingLocation}
                   className="px-3 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 flex items-center justify-center gap-1 whitespace-nowrap"
@@ -362,6 +363,7 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
                 </button>
               </div>
               <button 
+                type="button"
                 onClick={handleUpload} 
                 disabled={uploading}
                 className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-2 disabled:bg-slate-400"

@@ -249,54 +249,119 @@ export default function SupervisorDashboard() {
   const handleApproveReport = async (reportId: string, decision: 'APPROVED' | 'REJECTED', comments?: string) => {
      try {
        const token = await getToken();
-       
-       // Update report status
-       const res = await fetch(`/api/v1/reports/${reportId}/status`, {
-         method: 'PATCH',
-         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-         body: JSON.stringify({ 
-           status: decision,
-           performanceScore: decision === 'APPROVED' ? 95 : undefined
-         })
-       });
 
-       if (res.ok) {
-         const updatedReport = await res.json();
-         
-         // Synchronize the task lifecycle status
-         if (updatedReport.taskId) {
-           const targetTaskStatus = decision === 'APPROVED' ? 'Approved' : 'Revision Requested';
+       let taskId = '';
+       let realReportId = reportId;
+
+       if (reportId.startsWith('task_rep_')) {
+         taskId = reportId.replace('task_rep_', '');
+         realReportId = '';
+       } else {
+         const foundReport = reports.find(r => r.id === reportId);
+         if (foundReport && foundReport.taskId) {
+           taskId = foundReport.taskId;
+         }
+       }
+
+       const targetTaskStatus = decision === 'APPROVED' ? 'Approved' : 'Revision Requested';
+
+       // Update report status if real report exists
+       if (realReportId) {
+         await fetch(`/api/v1/reports/${realReportId}/status`, {
+           method: 'PATCH',
+           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+           body: JSON.stringify({ 
+             status: decision,
+             performanceScore: decision === 'APPROVED' ? 95 : undefined,
+             comments
+           })
+         }).catch(e => console.warn('Report status patch warning:', e));
+       }
+       
+       // Update task status
+       if (taskId) {
+         await handleTransitionTask(
+           taskId,
+           targetTaskStatus,
+           comments,
+           decision === 'APPROVED' ? 'Supervisor approved submitted work' : `Supervisor requested revisions: ${comments || 'Revision requested'}`
+         );
+       } else if (realReportId) {
+         // Fallback if taskId was not directly mapped
+         const r = reports.find(item => item.id === realReportId);
+         if (r && r.taskId) {
            await handleTransitionTask(
-             updatedReport.taskId, 
-             targetTaskStatus, 
-             comments, 
-             decision === 'APPROVED' ? 'Supervisor approved submitted work' : `Supervisor requested revisions: ${comments}`
+             r.taskId,
+             targetTaskStatus,
+             comments,
+             decision === 'APPROVED' ? 'Supervisor approved submitted work' : `Supervisor requested revisions: ${comments || 'Revision requested'}`
            );
          }
-
-         showSuccessToast(`Report has been ${decision.toLowerCase()}!`);
-         invalidateQueries([["tasks"], ["reports"]]);
-         setSelectedReport(null);
-       } else {
-         showErrorToast('Failed to process review decision.');
        }
+
+       showSuccessToast(`Submission has been ${decision.toLowerCase()}!`);
+       invalidateQueries([["tasks"], ["reports"]]);
+       setSelectedReport(null);
      } catch (e) {
        console.error(e);
        showErrorToast('Error processing review decision.');
      }
   };
 
-  const pendingApprovals = reports.filter(r => r.status === 'DRAFT' || r.status === 'SUBMITTED' || r.status === 'PENDING_REVIEW');
+  // Compile Approval Queue items: all reports pending review + tasks awaiting review
+  const pendingReportTaskIds = new Set(
+    reports
+      .filter(r => r.status === 'SUBMITTED' || r.status === 'PENDING_REVIEW')
+      .map(r => r.taskId)
+      .filter(Boolean)
+  );
+
+  const pendingTaskWrappers = tasks
+    .filter(t => ['Awaiting Review', 'Pending Approval'].includes(t.extendedStatus) && !pendingReportTaskIds.has(t.id))
+    .map(t => {
+      const existingReport = reports.find(r => r.taskId === t.id);
+      return {
+        id: existingReport ? existingReport.id : `task_rep_${t.id}`,
+        taskId: t.id,
+        task: t,
+        status: 'PENDING_REVIEW',
+        reportType: existingReport?.reportType || t.category || 'FIELD_VISIT',
+        submittedAt: existingReport?.submittedAt || t.updatedAt || t.createdAt,
+        submitter: existingReport?.submitter || t.assignee,
+        notes: existingReport?.notes || t.description || 'No notes provided.',
+        evidence: existingReport?.evidence || []
+      };
+    });
+
+  const pendingApprovals = [
+    ...reports
+      .filter(r => r.status === 'SUBMITTED' || r.status === 'PENDING_REVIEW')
+      .map(r => {
+        const matchingTask = tasks.find(t => t.id === r.taskId);
+        return {
+          ...r,
+          task: matchingTask ? { ...matchingTask, ...(r.task || {}) } : r.task,
+          evidence: r.evidence || []
+        };
+      }),
+    ...pendingTaskWrappers
+  ];
   
-  // Pipeline filter logic
+  // Pipeline filter logic: When 'ALL', exclude tasks awaiting review because they shift to Approval Queue
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = searchQuery ? (
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.assignee?.firstName + ' ' + t.assignee?.lastName).toLowerCase().includes(searchQuery.toLowerCase())
+      (t.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ((t.assignee?.firstName || '') + ' ' + (t.assignee?.lastName || '')).toLowerCase().includes(searchQuery.toLowerCase())
     ) : true;
     
-    const matchesStatus = statusFilter === 'ALL' ? true : t.extendedStatus === statusFilter;
+    let matchesStatus = true;
+    if (statusFilter === 'ALL') {
+      matchesStatus = !['Awaiting Review', 'Pending Approval'].includes(t.extendedStatus);
+    } else {
+      matchesStatus = t.extendedStatus === statusFilter;
+    }
+
     const matchesPriority = priorityFilter === 'ALL' ? true : t.priority === priorityFilter;
     
     return matchesSearch && matchesStatus && matchesPriority;
@@ -473,8 +538,12 @@ export default function SupervisorDashboard() {
                      <p className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 mt-2 inline-block rounded font-bold">{r.evidence.length} Evidence Items attached</p>
                    )}
                  </div>
-                 <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                 <div className="flex gap-2 w-full sm:w-auto shrink-0 flex-wrap">
                    <button onClick={() => setSelectedReport(r)} className="flex-1 sm:flex-none px-3.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer">VIEW WORKSPACE</button>
+                   <button onClick={() => {
+                     const reason = prompt("Enter revision feedback for the field staff:");
+                     if (reason) handleApproveReport(r.id, 'REJECTED', reason);
+                   }} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 cursor-pointer">REJECT / REVISE</button>
                    <button onClick={() => handleApproveReport(r.id, 'APPROVED')} className="flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-xs">APPROVE</button>
                  </div>
               </div>

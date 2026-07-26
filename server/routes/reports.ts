@@ -22,15 +22,16 @@ router.get('/', async (req: any, res: any) => {
     
     if (roleMatch === 'Field Staff') {
       filters.push(eq(reports.submitterId, req.dbUser.id));
-    } else if (roleMatch === 'Supervisor' || roleMatch === 'Area Manager') {
-      const subordinates = await db.select().from(users).where(eq(users.departmentId, req.dbUser.departmentId));
-      if (subordinates.length > 0) {
-        const ids = subordinates.map(u => u.id);
-        const userOrs = ids.map(id => eq(reports.submitterId, id));
-        filters.push(or(...userOrs));
-      } else {
-        filters.push(eq(reports.submitterId, req.dbUser.id)); // Fallback, just to return self reports if empty
+    } else if (roleMatch === 'Supervisor' || roleMatch === 'Area Manager' || roleMatch === 'Manager') {
+      if (req.dbUser.departmentId) {
+        const subordinates = await db.select().from(users).where(eq(users.departmentId, req.dbUser.departmentId));
+        if (subordinates.length > 0) {
+          const ids = [...subordinates.map(u => u.id), req.dbUser.id];
+          const userOrs = ids.map(id => eq(reports.submitterId, id));
+          filters.push(or(...userOrs));
+        }
       }
+      // If departmentId is null or no subordinates in department, don't restrict so supervisors can view all staff reports
     }
     
     const whereClause = filters.length > 0 ? and(...filters) : undefined;
@@ -221,7 +222,7 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
                }
             }
          } else {
-            // Fallback if no chain: assign to department head (Supervisor)
+            // Fallback if no chain: assign to department head (Supervisor) or any Supervisor
             const supervisorRole = await db.query.roles.findFirst({
                where: eq(roles.name, 'Supervisor')
             });
@@ -233,6 +234,14 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
                      eq(users.roleId, supervisorRole.id)
                   )
                });
+            }
+            if (!deptHead && supervisorRole) {
+               deptHead = await db.query.users.findFirst({
+                  where: eq(users.roleId, supervisorRole.id)
+               });
+            }
+            if (!deptHead) {
+               deptHead = await db.query.users.findFirst();
             }
             if (deptHead) {
                await db.insert(reportApprovals).values({
@@ -252,10 +261,10 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
        
        if (status === 'APPROVED') {
          taskStatus = 'COMPLETED';
-         taskExtendedStatus = 'Completed';
+         taskExtendedStatus = 'Approved';
        } else if (status === 'PENDING_REVIEW') {
          taskStatus = 'COMPLETED';
-         taskExtendedStatus = 'Pending Approval';
+         taskExtendedStatus = 'Awaiting Review';
        } else if (status === 'REJECTED') {
          taskStatus = 'IN_PROGRESS';
          taskExtendedStatus = 'Revision Requested';
