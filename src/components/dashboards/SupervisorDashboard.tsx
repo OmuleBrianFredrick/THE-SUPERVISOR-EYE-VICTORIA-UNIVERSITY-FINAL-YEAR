@@ -15,6 +15,10 @@ export default function SupervisorDashboard() {
   const { success: showSuccessToast, error: showErrorToast } = useToast();
   const invalidateQueries = useInvalidateQueries();
   
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReportId, setRejectReportId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
   const [isEmailing, setIsEmailing] = useState(false);
 
   const handleEmailReport = async (report: any) => {
@@ -355,10 +359,14 @@ export default function SupervisorDashboard() {
       ((t.assignee?.firstName || '') + ' ' + (t.assignee?.lastName || '')).toLowerCase().includes(searchQuery.toLowerCase())
     ) : true;
     
+    // Tasks in Awaiting Review / Pending Approval belong exclusively to the
+    // Approval Queue and must NEVER surface in the Operational Pipeline,
+    // regardless of which statusFilter is selected.
+    const isApprovalStageStatus = ['Awaiting Review', 'Pending Approval'].includes(t.extendedStatus);
     let matchesStatus = true;
-    if (statusFilter === 'ALL') {
-      matchesStatus = !['Awaiting Review', 'Pending Approval'].includes(t.extendedStatus);
-    } else {
+    if (isApprovalStageStatus) {
+      matchesStatus = false;
+    } else if (statusFilter !== 'ALL') {
       matchesStatus = t.extendedStatus === statusFilter;
     }
 
@@ -416,8 +424,8 @@ export default function SupervisorDashboard() {
                <>
                  <button 
                    onClick={() => {
-                     const reason = prompt("Enter the feedback / comments for requesting revisions:");
-                     if (reason) handleApproveReport(selectedReport.id, 'REJECTED', reason);
+                     setRejectReportId(selectedReport.id);
+                     setRejectModalOpen(true);
                    }} 
                    className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-100 cursor-pointer"
                  >
@@ -541,8 +549,8 @@ export default function SupervisorDashboard() {
                  <div className="flex gap-2 w-full sm:w-auto shrink-0 flex-wrap">
                    <button onClick={() => setSelectedReport(r)} className="flex-1 sm:flex-none px-3.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer">VIEW WORKSPACE</button>
                    <button onClick={() => {
-                     const reason = prompt("Enter revision feedback for the field staff:");
-                     if (reason) handleApproveReport(r.id, 'REJECTED', reason);
+                     setRejectReportId(r.id);
+                     setRejectModalOpen(true);
                    }} className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-bold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 cursor-pointer">REJECT / REVISE</button>
                    <button onClick={() => handleApproveReport(r.id, 'APPROVED')} className="flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-xs">APPROVE</button>
                  </div>
@@ -606,8 +614,6 @@ export default function SupervisorDashboard() {
                 <option value="Assigned">Assigned</option>
                 <option value="Accepted">Accepted</option>
                 <option value="In Progress">In Progress</option>
-                <option value="Awaiting Review">Awaiting Review</option>
-                <option value="Pending Approval">Pending Approval</option>
                 <option value="Revision Requested">Revision Requested</option>
                 <option value="Approved">Approved</option>
                 <option value="Completed">Completed</option>
@@ -1162,6 +1168,45 @@ export default function SupervisorDashboard() {
         </div>
       )}
 
-    </div>
+    
+      {rejectModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Request Revisions</h3>
+              <p className="text-sm text-slate-500 mb-4">Provide clear feedback to the field staff on what needs to be corrected.</p>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                className="w-full h-32 p-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="e.g., The stock count for item A is missing, please recount..."
+              />
+            </div>
+            <div className="bg-slate-50 p-4 flex justify-end gap-3 border-t border-slate-100">
+              <button 
+                onClick={() => { setRejectModalOpen(false); setRejectReason(''); setRejectReportId(null); }} 
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                   if (rejectReason.trim() && rejectReportId) {
+                      handleApproveReport(rejectReportId, 'REJECTED', rejectReason);
+                      setRejectModalOpen(false);
+                      setRejectReason('');
+                      setRejectReportId(null);
+                   }
+                }}
+                disabled={!rejectReason.trim()}
+                className="px-5 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition cursor-pointer"
+              >
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
   );
 }

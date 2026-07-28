@@ -180,7 +180,7 @@ export default function EvidenceUploader({ reportId, onUploadComplete }: Evidenc
         }
       }
 
-      if (isOffline || !navigator.onLine || reportId.startsWith('offline_')) {
+      if (!navigator.onLine || reportId.startsWith('offline_')) {
          // Queue offline upload
          await enqueueSync('UPLOAD_EVIDENCE', {
             reportId,

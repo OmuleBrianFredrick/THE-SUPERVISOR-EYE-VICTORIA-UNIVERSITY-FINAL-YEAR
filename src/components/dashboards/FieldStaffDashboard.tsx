@@ -99,6 +99,9 @@ export default function FieldStaffDashboard() {
                      body: JSON.stringify({ status, notes, gpsLat, gpsLng })
                    });
                    await removeSyncItem(item.id!);
+                 } else {
+                   // Server rejected it (e.g., 400/500). Remove from queue to prevent infinite blocking.
+                   await removeSyncItem(item.id!);
                  }
                } catch(e) {
                  break;
@@ -192,7 +195,7 @@ export default function FieldStaffDashboard() {
         // Geolocation checks passed. Initialize draft report if not present
         let draftReport = (reports || []).find(r => r.taskId === task.id && (r.status === 'DRAFT' || r.status === 'REJECTED'));
         if (!draftReport) {
-          if (navigator.onLine && !isOffline) {
+          if (navigator.onLine) {
             try {
               const token = await getToken();
               const res = await fetch('/api/v1/reports', {
@@ -209,10 +212,17 @@ export default function FieldStaffDashboard() {
                 draftReport = await res.json();
                 setReports(prev => [draftReport, ...(prev || [])]);
               } else {
-                throw new Error('Failed to create online draft');
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to create online draft');
               }
-            } catch(e) {
+            } catch(e: any) {
+               if (navigator.onLine && e.message !== 'Failed to fetch') {
+                  showErrorToast(e.message || 'Failed to create report.');
+                  setCheckingInTaskId(null);
+                  return;
+               }
                console.log('Failed to create draft online, falling back to offline draft', e);
+               showErrorToast('Could not reach server. Working offline.');
                draftReport = {
                  id: `offline_${task.id}`,
                  taskId: task.id,
@@ -439,7 +449,7 @@ export default function FieldStaffDashboard() {
              {isOffline && <span className="text-xs font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-md"><WifiOff className="w-3 h-3" /> OFFLINE</span>}
              <button onClick={async () => {
                   const submit = async () => {
-                    if (draftReport.isOffline || isOffline || !navigator.onLine) {
+                    if (draftReport.isOffline || !navigator.onLine) {
                        const finalReport = { ...draftReport, status: 'PENDING_REVIEW', notes };
                        const newReports = (reports || []).map(r => r.id === draftReport.id ? finalReport : r);
                        setReports(newReports);
@@ -479,8 +489,10 @@ export default function FieldStaffDashboard() {
                         return;
                       }
                       
-                      // Explicitly change task status to 'Pending Approval'
-                      await handleTransitionTask(activeTask.id, 'Pending Approval', undefined, 'Report submitted for approval review');
+                      // Note: PATCH /api/v1/reports/:id/status (above) already syncs the
+                      // parent task's extendedStatus to 'Awaiting Review' on the backend.
+                      // A separate task-transition call is not needed and was removed here
+                      // to avoid firing two status-changing requests for one user action.
                       
                       showSuccessToast('Work successfully submitted for review!');
                       setActiveTask(null);
@@ -507,7 +519,7 @@ export default function FieldStaffDashboard() {
                     <BarcodeScanner onResult={async (result) => {
                        const newNotes = notes + (notes ? '\n' : '') + `Scanned SKU: ${result}`;
                        setNotes(newNotes);
-                       if (draftReport.isOffline || isOffline || !navigator.onLine) {
+                       if (draftReport.isOffline || !navigator.onLine) {
                           const newReports = (reports || []).map(r => r.id === draftReport.id ? { ...r, notes: newNotes } : r);
                           setReports(newReports);
                           await cacheReports(newReports);
@@ -532,7 +544,7 @@ export default function FieldStaffDashboard() {
                    className="w-full h-32 p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-sm"
                    placeholder="Enter details of your visit or audit here..."
                    onBlur={async () => {
-                      if (draftReport.isOffline || isOffline || !navigator.onLine) {
+                      if (draftReport.isOffline || !navigator.onLine) {
                          const newReports = (reports || []).map(r => r.id === draftReport.id ? { ...r, notes } : r);
                          setReports(newReports);
                          await cacheReports(newReports);
@@ -751,19 +763,25 @@ export default function FieldStaffDashboard() {
                       </button>
                     )}
 
-                    {t.extendedStatus === 'Revision Requested' && (
+                    {t.extendedStatus === 'Revision Requested' && (() => {
+                      const tReport = (reports || []).find(r => r.taskId === t.id);
+                      const rejectionCount = tReport ? (tReport.versions || []).filter((v: any) => v.status === 'REJECTED').length : 0;
+                      return (
                       <button 
                         onClick={() => handleExecuteTask(t)} 
-                        disabled={checkingInTaskId === t.id}
-                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        disabled={checkingInTaskId === t.id || rejectionCount >= 5}
+                        className={`text-white text-xs font-extrabold px-4 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm ${rejectionCount >= 5 ? 'bg-slate-400 opacity-50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}
                       >
                         {checkingInTaskId === t.id ? (
                           <><RefreshCw className="w-3 h-3 animate-spin" /> CHECKING IN...</>
+                        ) : rejectionCount >= 5 ? (
+                          <><AlertCircle className="w-3.5 h-3.5" /> MAX REVISIONS EXCEEDED</>
                         ) : (
                           <><RotateCcw className="w-3.5 h-3.5" /> RE-EXECUTE & REVISE</>
                         )}
                       </button>
-                    )}
+                      );
+                    })()}
 
                     {(t.extendedStatus === 'Pending Approval' || t.extendedStatus === 'Awaiting Review') && (
                       <span className="px-3.5 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-black rounded-lg flex items-center gap-1.5">
@@ -1069,18 +1087,23 @@ export default function FieldStaffDashboard() {
                 </button>
               )}
 
-              {(selectedDetailTask.extendedStatus === 'In Progress' || selectedDetailTask.extendedStatus === 'Revision Requested') && (
+              {(selectedDetailTask.extendedStatus === 'In Progress' || selectedDetailTask.extendedStatus === 'Revision Requested') && (() => {
+                const tReport = (reports || []).find(r => r.taskId === selectedDetailTask.id);
+                const rejectionCount = tReport ? (tReport.versions || []).filter((v: any) => v.status === 'REJECTED').length : 0;
+                return (
                 <button 
                   onClick={() => {
                     const task = selectedDetailTask;
                     setSelectedDetailTask(null);
                     handleExecuteTask(task);
                   }}
-                  className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  disabled={rejectionCount >= 5}
+                  className={`text-white text-xs font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${rejectionCount >= 5 ? 'bg-slate-400 opacity-50 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'}`}
                 >
-                  EXECUTE & UPLOAD
+                  {rejectionCount >= 5 ? <><AlertCircle className="w-3.5 h-3.5" /> MAX REVISIONS EXCEEDED</> : 'EXECUTE & UPLOAD'}
                 </button>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

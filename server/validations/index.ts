@@ -118,7 +118,7 @@ export const updateTaskStatusSchema = z.object({
 export const createReportSchema = z.object({
   body: z.object({
     taskId: z.string().uuid().optional(),
-    reportType: z.enum(['FIELD_VISIT', 'INCIDENT', 'MAINTENANCE_LOG', 'COMPLIANCE_AUDIT', 'OTHER']),
+    reportType: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'FIELD_VISIT', 'SALES_VISIT', 'STOCK_AUDIT']),
     gpsLat: z.number().optional(),
     gpsLng: z.number().optional(),
     locationName: z.string().optional(),
@@ -136,6 +136,9 @@ export const updateReportSchema = z.object({
     performanceScore: z.number().min(0).max(100).optional(),
     notes: z.string().optional(),
     locationName: z.string().optional(),
+    gpsLat: z.number().optional(),
+    gpsLng: z.number().optional(),
+    overrideGeofence: z.boolean().optional(),
   }),
 });
 

@@ -129,7 +129,7 @@ router.post('/', validate(createTaskSchema), async (req: any, res: any) => {
         dueDate: new Date(dueDate),
         assignedTo,
         createdBy: req.dbUser.id,
-        status: ['Approved', 'Completed', 'Archived', 'Awaiting Review', 'Pending Approval'].includes(targetStatus) ? 'COMPLETED' : 
+        status: ['Approved', 'Completed', 'Archived', 'Awaiting Review'].includes(targetStatus) ? 'COMPLETED' : 
                 ['In Progress', 'Revision Requested'].includes(targetStatus) ? 'IN_PROGRESS' : 'PENDING',
         extendedStatus: targetStatus,
         category: category || 'General',
@@ -232,7 +232,7 @@ router.patch('/:id', validate(updateTaskDetailsSchema), async (req: any, res: an
         // Auto-update status upon assignment
         const newExtendedStatus = extendedStatus || 'Assigned';
         updates.extendedStatus = newExtendedStatus;
-        updates.status = ['Approved', 'Completed', 'Archived', 'Awaiting Review', 'Pending Approval'].includes(newExtendedStatus) ? 'COMPLETED' : 
+        updates.status = ['Approved', 'Completed', 'Archived', 'Awaiting Review'].includes(newExtendedStatus) ? 'COMPLETED' : 
                          ['In Progress', 'Revision Requested'].includes(newExtendedStatus) ? 'IN_PROGRESS' : 'PENDING';
 
         // Add timeline log entry
@@ -246,7 +246,7 @@ router.patch('/:id', validate(updateTaskDetailsSchema), async (req: any, res: an
         updates.timeline = timeline;
       } else if (extendedStatus !== undefined && extendedStatus !== task.extendedStatus) {
         updates.extendedStatus = extendedStatus;
-        updates.status = ['Approved', 'Completed', 'Archived', 'Awaiting Review', 'Pending Approval'].includes(extendedStatus) ? 'COMPLETED' : 
+        updates.status = ['Approved', 'Completed', 'Archived', 'Awaiting Review'].includes(extendedStatus) ? 'COMPLETED' : 
                          ['In Progress', 'Revision Requested'].includes(extendedStatus) ? 'IN_PROGRESS' : 'PENDING';
 
         const timeline = Array.isArray(task.timeline) ? [...task.timeline] : [];
@@ -341,15 +341,15 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req: any, r
           // Field staff permitted actions
           if (extendedStatus === 'Accepted' && !['Assigned', 'Draft', 'Accepted'].includes(current)) isValidTransition = false;
           else if (extendedStatus === 'In Progress' && !['Accepted', 'Assigned', 'In Progress', 'Revision Requested'].includes(current)) isValidTransition = false;
-          else if (['Awaiting Review', 'Pending Approval'].includes(extendedStatus) && !['In Progress', 'Accepted', 'Revision Requested', 'Awaiting Review', 'Pending Approval'].includes(current)) isValidTransition = false;
-          else if (!['Accepted', 'In Progress', 'Awaiting Review', 'Pending Approval'].includes(extendedStatus)) {
+          else if (['Awaiting Review'].includes(extendedStatus) && !['In Progress', 'Accepted', 'Revision Requested', 'Awaiting Review'].includes(current)) isValidTransition = false;
+          else if (!['Accepted', 'In Progress', 'Awaiting Review'].includes(extendedStatus)) {
             isValidTransition = false;
           }
         } else {
           // Supervisors, Admins, Executives permitted actions
           if (extendedStatus === 'Assigned' && !['Draft', 'Assigned'].includes(current)) isValidTransition = false;
-          else if (['Approved', 'Completed'].includes(extendedStatus) && !['Awaiting Review', 'Pending Approval', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
-          else if (extendedStatus === 'Revision Requested' && !['Awaiting Review', 'Pending Approval', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
+          else if (['Approved', 'Completed'].includes(extendedStatus) && !['Awaiting Review', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
+          else if (extendedStatus === 'Revision Requested' && !['Awaiting Review', 'In Progress', 'Accepted', 'Revision Requested'].includes(current)) isValidTransition = false;
           else if (extendedStatus === 'Archived' && !['Completed', 'Approved', 'Archived', 'Revision Requested', 'In Progress'].includes(current)) isValidTransition = false;
         }
         
@@ -364,7 +364,7 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req: any, r
           updates.status = 'PENDING';
         } else if (['In Progress', 'Revision Requested'].includes(extendedStatus)) {
           updates.status = 'IN_PROGRESS';
-        } else if (['Awaiting Review', 'Pending Approval', 'Approved', 'Completed', 'Archived'].includes(extendedStatus)) {
+        } else if (['Awaiting Review', 'Approved', 'Completed', 'Archived'].includes(extendedStatus)) {
           updates.status = 'COMPLETED';
         }
         
@@ -401,10 +401,10 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req: any, r
         let notifTitle = 'Task Notification';
         let notifMsg = `Task "${existingTask.title}" status changed to ${extendedStatus}.`;
         
-        if (['Awaiting Review', 'Pending Approval'].includes(extendedStatus)) {
+        if (['Awaiting Review'].includes(extendedStatus)) {
           recipientId = existingTask.createdBy;
           notifType = 'REPORT_SUBMISSION';
-          notifTitle = 'Task Completed: Pending Approval';
+          notifTitle = 'Task Completed: Awaiting Review';
           notifMsg = `Task "${existingTask.title}" has been completed by ${req.dbUser.firstName} ${req.dbUser.lastName} and is pending approval.`;
         } else if (extendedStatus === 'Revision Requested') {
           recipientId = existingTask.assignedTo;

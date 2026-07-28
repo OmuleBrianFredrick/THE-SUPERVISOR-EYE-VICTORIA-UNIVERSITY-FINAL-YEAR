@@ -44,7 +44,8 @@ router.get('/', async (req: any, res: any) => {
       with: {
         submitter: { columns: { id: true, firstName: true, lastName: true } },
         task: { columns: { id: true, title: true } },
-        evidence: true
+        evidence: true,
+        versions: true
       }
     });
 
@@ -62,9 +63,23 @@ router.post('/', validate(createReportSchema), async (req: any, res: any) => {
   try {
     const { taskId, reportType, gpsLat, gpsLng, locationName, outsideGeofence, notes } = req.body;
     
+    let validTaskId: string | null = null;
+    if (taskId) {
+      try {
+        const existingTask = await db.query.tasks.findFirst({
+          where: eq(tasks.id, taskId)
+        });
+        if (existingTask) {
+          validTaskId = taskId;
+        }
+      } catch (e) {
+        validTaskId = null;
+      }
+    }
+
     // Create report
     const newReport = await db.insert(reports).values({
-      taskId,
+      taskId: validTaskId,
       reportType,
       gpsLat,
       gpsLng,
@@ -77,9 +92,9 @@ router.post('/', validate(createReportSchema), async (req: any, res: any) => {
     }).returning();
     
     // Update task status
-    if (taskId) {
+    if (validTaskId) {
       // @ts-ignore
-      await db.update(tasks).set({ status: 'IN_PROGRESS', updatedAt: new Date() }).where(eq(tasks.id, taskId));
+      await db.update(tasks).set({ status: 'IN_PROGRESS', updatedAt: new Date() }).where(eq(tasks.id, validTaskId));
     }
     
     // Log Audit
@@ -121,6 +136,13 @@ router.patch('/:id/status', validate(updateReportSchema), async (req: any, res: 
     
     if (!existing) {
       return res.status(404).json({ error: 'Report not found' });
+    }
+
+    if (status === 'PENDING_REVIEW') {
+      const rejectionCount = (existing.versions || []).filter((v: any) => v.status === 'REJECTED').length;
+      if (rejectionCount >= 5) {
+        return res.status(403).json({ error: 'Maximum resubmission limit (5) exceeded. This report can no longer be submitted.' });
+      }
     }
 
     // GEOFENCE ENFORCEMENT
