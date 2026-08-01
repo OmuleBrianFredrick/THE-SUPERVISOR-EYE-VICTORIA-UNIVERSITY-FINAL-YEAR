@@ -13,6 +13,7 @@ import {
   Phone, 
   Briefcase, 
   BadgeCheck,
+  Search,
   User,
   ShieldCheck
 } from 'lucide-react';
@@ -50,6 +51,7 @@ export default function Onboarding() {
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [selectedDeptName, setSelectedDeptName] = useState('');
   const [selectedManagerId, setSelectedManagerId] = useState('');
+  const [supervisorSearch, setSupervisorSearch] = useState('');
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,10 +128,13 @@ export default function Onboarding() {
     setSelectedDeptName(deptObj ? deptObj.name : '');
   };
 
-  // Displays only supervisors belonging to the selected department
+  // Displays only supervisors belonging to the selected department matching search
   const getFilteredSupervisors = () => {
     if (!selectedDeptId) return [];
-    return supervisorsList.filter(s => s.departmentId === selectedDeptId);
+    return supervisorsList.filter(s => 
+      s.departmentId === selectedDeptId &&
+      (`${s.firstName} ${s.lastName} ${s.jobTitle || ''}`).toLowerCase().includes(supervisorSearch.toLowerCase())
+    );
   };
 
   const handleNextStep = () => {
@@ -444,6 +449,16 @@ export default function Onboarding() {
                     <p className="text-xs text-slate-500 mt-0.5 font-medium">
                       Displaying managers/supervisors strictly assigned to your department: <strong className="text-slate-900 font-bold">{selectedDeptName}</strong>
                     </p>
+                    <div className="mt-3 relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search supervisor by name..."
+                        value={supervisorSearch}
+                        onChange={e => setSupervisorSearch(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:ring-2 focus:ring-slate-900 text-slate-800 font-medium"
+                      />
+                    </div>
                   </div>
 
                   {getFilteredSupervisors().length === 0 ? (

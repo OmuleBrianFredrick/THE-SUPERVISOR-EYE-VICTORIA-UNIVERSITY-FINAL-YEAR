@@ -4,9 +4,14 @@ import { useToast } from '../../contexts/ToastContext';
 import { 
   Users, FileCheck, Map, Activity, RefreshCw, ChevronLeft, Download,
   GitMerge, CheckCircle, Clock, Eye, MessageSquare, Search, Filter, 
-  Send, History, AlertCircle, FileText, Trash2, Archive, CheckSquare
+  Send, History, AlertCircle, FileText, Trash2, Archive, CheckSquare,
+  Plus, X, Sparkles, Wand2, FilePlus, ShieldCheck, ShieldAlert, ArrowLeft
 } from 'lucide-react';
 import EvidenceGallery from '../features/EvidenceGallery';
+import EvidenceUploader from '../features/EvidenceUploader';
+import LiveWorkerMapOverlay from '../features/LiveWorkerMapOverlay';
+import MapLocationPicker from '../features/MapLocationPicker';
+import { SearchableSelect } from '../ui/SearchableSelect';
 import { generateReportPDF, getReportPDFBase64 } from '../../lib/pdfGenerator';
 import { useTasksQuery, useReportsQuery, useSubordinatesQuery, useInvalidateQueries } from '../../hooks/useQueries';
 
@@ -19,20 +24,49 @@ export default function SupervisorDashboard() {
   const [rejectReportId, setRejectReportId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Delete Task Modal State
+  const [taskToDelete, setTaskToDelete] = useState<any | null>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+
   const [isEmailing, setIsEmailing] = useState(false);
 
-  const handleEmailReport = async (report: any) => {
+  const [activeTab, setActiveTab] = useState<'approvals' | 'pipelines' | 'reports'>('approvals');
+
+  // Supervisor Report Creation States
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
+  const [isCreatingManualReport, setIsCreatingManualReport] = useState(false);
+  const [manualReportForm, setManualReportForm] = useState({
+    reportType: 'SUPERVISOR_SUMMARY',
+    locationName: profile?.department || 'Division Headquarters',
+    notes: '',
+    recipientScope: 'Department Managers & Executive Operations'
+  });
+  const [createdReportForEvidence, setCreatedReportForEvidence] = useState<any | null>(null);
+
+  // Email Report Modal State
+  const [reportToEmail, setReportToEmail] = useState<any | null>(null);
+  const [emailRecipientInput, setEmailRecipientInput] = useState('christianekarel@gmail.com');
+
+  const handleOpenEmailModal = (report: any) => {
     if (!googleAccessToken) {
       showErrorToast("Please sign in with Google to send emails.");
       return;
     }
-    const toEmail = prompt("Enter recipient email address:");
-    if (!toEmail) return;
+    setReportToEmail(report);
+    setEmailRecipientInput(report.submitter?.email || 'christianekarel@gmail.com');
+  };
+
+  const handleExecuteEmailReport = async () => {
+    if (!reportToEmail) return;
+    if (!emailRecipientInput || !emailRecipientInput.includes('@')) {
+      showErrorToast("Please enter a valid recipient email address.");
+      return;
+    }
 
     setIsEmailing(true);
-    showSuccessToast("Generating PDF and sending email...");
+    showSuccessToast("Generating PDF and dispatching email via Gmail...");
     try {
-      const pdfBase64 = await getReportPDFBase64(report);
+      const pdfBase64 = await getReportPDFBase64(reportToEmail);
       const token = await getToken();
       
       const res = await fetch('/api/v1/gmail/send-report', {
@@ -42,24 +76,25 @@ export default function SupervisorDashboard() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          to: toEmail,
-          subject: `Supervisor Eye Report: ${report.task?.title || report.reportType}`,
-          message: `Please find the attached audit report submitted by ${report.submitter?.firstName || ''} ${report.submitter?.lastName || ''}.\n\nSupervisor Eye System`,
+          to: emailRecipientInput,
+          subject: `Supervisor Eye Report: ${reportToEmail.task?.title || reportToEmail.reportType}`,
+          message: `Please find the attached audit report submitted by ${reportToEmail.submitter?.firstName || ''} ${reportToEmail.submitter?.lastName || ''}.\n\nSupervisor Eye Operations`,
           pdfBase64,
-          filename: `Audit_Report_${report.id?.substring(0, 8) || 'Export'}.pdf`,
+          filename: `Audit_Report_${reportToEmail.id?.substring(0, 8) || 'Export'}.pdf`,
           googleAccessToken
         })
       });
       
       if (res.ok) {
-        showSuccessToast("Report emailed successfully!");
+        showSuccessToast(`Report emailed successfully to ${emailRecipientInput}`);
+        setReportToEmail(null);
       } else {
         const err = await res.json();
         showErrorToast(err.error || "Failed to send email");
       }
     } catch (err: any) {
       console.error(err);
-      showErrorToast("Failed to email report.");
+      showErrorToast(err.message || "Failed to email report.");
     } finally {
       setIsEmailing(false);
     }
@@ -75,8 +110,77 @@ export default function SupervisorDashboard() {
   const loading = loadingTasks || loadingReports;
 
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
-  
-  const [activeTab, setActiveTab] = useState<'approvals' | 'pipelines'>('approvals');
+
+  const handleAutoGenerateReport = async () => {
+    setIsAutoGenerating(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/v1/reports/auto-generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const report = await res.json();
+        showSuccessToast('Automated task summary report compiled & queued!');
+        invalidateQueries([["reports"]]);
+        setSelectedReport(report);
+      } else {
+        const err = await res.json();
+        showErrorToast(err.error || 'Failed to auto-generate report');
+      }
+    } catch (err: any) {
+      showErrorToast('Error auto-generating supervisor report');
+    } finally {
+      setIsAutoGenerating(false);
+    }
+  };
+
+  const handleCreateManualReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualReportForm.notes.trim()) {
+      showErrorToast('Please enter report notes or operational feedback');
+      return;
+    }
+    setIsCreatingManualReport(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/v1/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          reportType: manualReportForm.reportType,
+          locationName: manualReportForm.locationName,
+          notes: manualReportForm.notes,
+          status: 'PENDING_REVIEW'
+        })
+      });
+      if (res.ok) {
+        const newReport = await res.json();
+        showSuccessToast('Supervisory report submitted to management!');
+        invalidateQueries([["reports"]]);
+        setCreatedReportForEvidence(newReport);
+        setManualReportForm({
+          reportType: 'SUPERVISOR_SUMMARY',
+          locationName: profile?.department || 'Division Headquarters',
+          notes: '',
+          recipientScope: 'Department Managers & Executive Operations'
+        });
+      } else {
+        const err = await res.json();
+        showErrorToast(err.error || 'Failed to submit report');
+      }
+    } catch (err) {
+      showErrorToast('Error submitting supervisory report');
+    } finally {
+      setIsCreatingManualReport(false);
+    }
+  };
   
   // Pipeline filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +201,8 @@ export default function SupervisorDashboard() {
     priority: 'MEDIUM',
     assignedTo: '',
     targetLocationName: '',
+    targetLocationLat: null as number | null,
+    targetLocationLng: null as number | null,
     dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
   });
 
@@ -143,6 +249,34 @@ export default function SupervisorDashboard() {
     }
   };
 
+
+  const handleExecuteDeleteTask = async () => {
+    if (!taskToDelete) return;
+    setIsDeletingTask(true);
+    
+    try {
+      const res = await fetch(`/api/v1/tasks/${taskToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await getToken()}` }
+      });
+      if (res.ok) {
+        showSuccessToast(`Dispatched task "${taskToDelete.title}" deleted successfully`);
+        invalidateQueries([["tasks"], ["reports"], ["stats"]]);
+        if (selectedDetailTask && selectedDetailTask.id === taskToDelete.id) {
+          setSelectedDetailTask(null);
+        }
+        setTaskToDelete(null);
+      } else {
+        const data = await res.json();
+        showErrorToast(data.error || 'Failed to delete task');
+      }
+    } catch (err: any) {
+      showErrorToast(err.message || 'Error deleting task');
+    } finally {
+      setIsDeletingTask(false);
+    }
+  };
+
   useEffect(() => {
     if (subordinates.length > 0 && !assignForm.assignedTo) {
       setAssignForm(prev => ({ ...prev, assignedTo: subordinates[0].id }));
@@ -172,6 +306,8 @@ export default function SupervisorDashboard() {
           priority: 'MEDIUM',
           assignedTo: subordinates[0]?.id || '',
           targetLocationName: '',
+          targetLocationLat: null,
+          targetLocationLng: null,
           dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
         });
         invalidateQueries([["tasks"], ["reports"]]);
@@ -419,7 +555,7 @@ export default function SupervisorDashboard() {
           </div>
           <div className="flex gap-2">
              <button onClick={() => generateReportPDF(selectedReport)} className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-200 flex items-center gap-2 cursor-pointer"><Download className="w-4 h-4" /> EXPORT PDF</button>
-             <button disabled={isEmailing} onClick={() => handleEmailReport(selectedReport)} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2 cursor-pointer disabled:opacity-50"><Send className="w-4 h-4" /> {isEmailing ? 'SENDING...' : 'EMAIL REPORT'}</button>
+             <button disabled={isEmailing} onClick={() => handleOpenEmailModal(selectedReport)} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100 flex items-center gap-2 cursor-pointer disabled:opacity-50"><Send className="w-4 h-4" /> {isEmailing ? 'SENDING...' : 'EMAIL REPORT'}</button>
              {selectedReport.status !== 'APPROVED' && (
                <>
                  <button 
@@ -529,6 +665,18 @@ export default function SupervisorDashboard() {
             <GitMerge className="w-4 h-4" />
             OPERATIONAL PIPELINES ({tasks.length})
           </button>
+
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition cursor-pointer ${
+              activeTab === 'reports' 
+                ? 'bg-slate-900 text-white shadow-sm' 
+                : 'text-slate-500 hover:bg-white/40 hover:text-slate-800'
+            }`}
+          >
+            <FilePlus className="w-4 h-4 text-emerald-400" />
+            CREATE SUPERVISOR REPORT
+          </button>
         </div>
 
         {/* Tab 1: Approval Queue */}
@@ -616,8 +764,6 @@ export default function SupervisorDashboard() {
                 <option value="In Progress">In Progress</option>
                 <option value="Revision Requested">Revision Requested</option>
                 <option value="Approved">Approved</option>
-                <option value="Completed">Completed</option>
-                <option value="Archived">Archived</option>
               </select>
 
               <select
@@ -633,226 +779,414 @@ export default function SupervisorDashboard() {
               </select>
             </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-slate-50/50">
-              {filteredTasks.map(t => (
-                <div key={t.id} className="bg-white p-4 rounded-xl border border-slate-200 hover:border-slate-300 shadow-xs hover:shadow-sm transition-all flex flex-col gap-3 group">
+            {/* Tasks Grid */}
+            <div className="flex-1 md:overflow-y-auto overflow-visible p-5 space-y-4 bg-slate-50/50">
+              {(filteredTasks || []).map(t => (
+                <div 
+                  key={t.id} 
+                  className="border border-slate-200 p-5 rounded-2xl hover:border-slate-300 hover:shadow-sm transition-all bg-white flex flex-col gap-4 relative group"
+                >
                   <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="text-[9px] bg-slate-900 text-white font-black px-2 py-0.5 rounded tracking-wider uppercase">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-black bg-slate-900 text-white px-2 py-0.5 rounded tracking-wide uppercase">
                           {t.category || 'General'}
                         </span>
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase ${getStatusBadgeStyle(t.extendedStatus)}`}>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border bg-slate-50 text-slate-700 border-slate-200">
                           {t.extendedStatus}
                         </span>
-                        <span className="text-xs text-slate-500 font-bold">Assigned to: {t.assignee?.firstName} {t.assignee?.lastName}</span>
                       </div>
-                      <h4 className="font-extrabold text-slate-800 text-sm group-hover:text-indigo-600 transition">{t.title}</h4>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-1">{t.description}</p>
+                      <h4 className="font-extrabold text-slate-900 text-base leading-tight group-hover:text-indigo-600 transition">{t.title}</h4>
+                      <p className="text-xs text-slate-600 font-medium line-clamp-2">{t.description}</p>
                     </div>
-                    
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
-                      t.priority === 'CRITICAL' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {t.priority}
-                    </span>
                   </div>
 
-                  <div className="flex justify-between items-center pt-3 border-t border-slate-150 flex-wrap gap-3">
-                    <div className="flex items-center gap-4 text-[10px] text-slate-400 font-bold">
-                      <div className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Due: {new Date(t.dueDate).toLocaleDateString()}</div>
-                      {t.comments && t.comments.length > 0 && (
-                        <div className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5 text-indigo-400" /> {t.comments.length} Comments</div>
-                      )}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-100">
+                    <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
+                       <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /> Due: {new Date(t.dueDate).toLocaleDateString()}</div>
                     </div>
-
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => setSelectedDetailTask(t)} 
-                        className="px-2.5 py-1 text-[11px] font-black border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg flex items-center gap-1 cursor-pointer"
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedDetailTask(t)}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer transition border border-slate-200"
                       >
                         <Eye className="w-3.5 h-3.5" /> DETAILS
                       </button>
-
-                      {t.extendedStatus === 'Approved' && (
-                        <button 
-                          onClick={() => handleTransitionTask(t.id, 'Completed', undefined, 'Supervisor marked work completed')} 
-                          className="px-2.5 py-1 text-[11px] font-black bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg flex items-center gap-1 cursor-pointer"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> COMPLETED
-                        </button>
-                      )}
-
-                      {t.extendedStatus === 'Completed' && (
-                        <button 
-                          onClick={() => handleTransitionTask(t.id, 'Archived', undefined, 'Supervisor archived completed task')} 
-                          className="px-2.5 py-1 text-[11px] font-black bg-slate-200 hover:bg-slate-350 text-slate-700 rounded-lg flex items-center gap-1 cursor-pointer"
-                        >
-                          <Archive className="w-3.5 h-3.5" /> ARCHIVE
-                        </button>
-                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTaskToDelete(t);
+                        }}
+                        className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition border border-red-200 hover:border-red-300"
+                        title="Delete Task"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" /> DELETE
+                      </button>
                     </div>
                   </div>
                 </div>
               ))}
+              
               {filteredTasks.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-10">No tasks match pipeline filters.</p>
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-16">
+                  <FileCheck className="w-12 h-12 mb-3 text-slate-200" />
+                  <p className="font-bold text-sm">No tasks matched your filter criteria.</p>
+                </div>
               )}
             </div>
           </div>
         )}
-      </div>
+        {/* Tab 3: Supervisor Report Creation Hub */}
+        {activeTab === 'reports' && (
+          <div className="flex-1 md:overflow-y-auto overflow-visible p-6 space-y-6 bg-slate-50/60">
+            {/* Automated Task Queue Compiler Card */}
+            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold uppercase tracking-wider mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-spin" /> AUTOMATED TASK QUEUE COMPILER
+                  </div>
+                  <h3 className="text-xl font-black text-white">Auto-Compile Task & Operational Summary</h3>
+                  <p className="text-xs text-slate-300 mt-1 max-w-xl">
+                    Automatically computes dispatched tasks, completion velocities, and subordinate activity metrics across your jurisdiction, generating a queued summary report ready for management review.
+                  </p>
+                </div>
+                <button
+                  disabled={isAutoGenerating}
+                  onClick={handleAutoGenerateReport}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-6 py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow-lg flex items-center gap-2 shrink-0 disabled:opacity-50"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  {isAutoGenerating ? 'Compiling Task Queue...' : 'Auto-Generate & Queue Report'}
+                </button>
+              </div>
 
-      {/* Side Panel: Active Uganda Team */}
-      <div className="md:col-span-4 bg-slate-50 rounded-2xl border border-slate-200 p-5 flex flex-col min-h-[300px] md:h-full md:overflow-hidden overflow-visible shadow-sm">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2 shrink-0">
-          <Map className="w-4 h-4" /> Operational Locations
-        </h3>
-        <div className="bg-slate-200 flex-1 rounded-xl w-full border border-slate-300 relative overflow-hidden flex items-center justify-center">
-           <Map className="w-12 h-12 text-slate-400 opacity-50 absolute" />
-           <div className="absolute inset-0 p-4">
-             <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce absolute top-20 left-10 shadow-lg shadow-emerald-500/50 outline outline-2 outline-white"></div>
-             <div className="w-3 h-3 bg-amber-500 rounded-full absolute bottom-20 right-16 shadow-lg outline outline-2 outline-white animate-pulse"></div>
-           </div>
-        </div>
-        <div className="shrink-0 mt-4 space-y-2 bg-white p-3 rounded-xl border border-slate-150">
-           <div className="flex justify-between items-center text-xs">
-             <span className="font-bold flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div> On Route</span>
-             <span className="text-slate-500">12 Officers</span>
-           </div>
-           <div className="flex justify-between items-center text-xs">
-             <span className="font-bold flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Delayed</span>
-             <span className="text-slate-500">3 Officers</span>
-           </div>
-        </div>
-      </div>
+              <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-800 text-center">
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                  <div className="text-2xl font-black text-indigo-400">{tasks.length}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Dispatched Tasks</div>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                  <div className="text-2xl font-black text-emerald-400">{tasks.filter(t => t.status === 'COMPLETED').length}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Completed Items</div>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                  <div className="text-2xl font-black text-amber-400">{subordinates.length}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Field Personnel</div>
+                </div>
+              </div>
+            </div>
 
-      {/* Task Dispatch Modal */}
+            {/* Manual Operational Report Creation Form */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-150 pb-3">
+                <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                  <FilePlus className="w-5 h-5 text-indigo-600" />
+                  Compose Supervisory Operational Report
+                </h3>
+                <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-full border border-slate-200">
+                  Escalates to Department Managers & MD
+                </span>
+              </div>
+
+              <form onSubmit={handleCreateManualReport} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Report Type / Category
+                    </label>
+                    <select
+                      value={manualReportForm.reportType}
+                      onChange={e => setManualReportForm(prev => ({ ...prev, reportType: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 bg-white font-medium text-slate-800"
+                    >
+                      <option value="SUPERVISOR_SUMMARY">Supervisor Operational Summary</option>
+                      <option value="DIVISION_PROGRESS">Division Activity & Progress Report</option>
+                      <option value="FIELD_VISIT">Field Audit & Site Supervision</option>
+                      <option value="OPERATIONAL_FEEDBACK">Subordinate & Operational Feedback</option>
+                      <option value="ESCALATION_BRIEF">Management Escalation Brief</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Division / Command Location
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={manualReportForm.locationName}
+                      onChange={e => setManualReportForm(prev => ({ ...prev, locationName: e.target.value }))}
+                      placeholder="e.g. Mukono Sector Command Center"
+                      className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 text-slate-800 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Operational Feedback, Field Progress & Observations
+                  </label>
+                  <textarea
+                    required
+                    rows={5}
+                    value={manualReportForm.notes}
+                    onChange={e => setManualReportForm(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Provide operational summary, task execution achievements, field officer performance observations, and recommendations for top management..."
+                    className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 text-slate-800"
+                  ></textarea>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={isCreatingManualReport}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4 text-emerald-400" />
+                    {isCreatingManualReport ? 'Submitting Report...' : 'Submit Report to Management'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Upload evidence section for newly created supervisory report */}
+              {createdReportForEvidence && (
+                <div className="mt-6 pt-6 border-t border-slate-200 bg-indigo-50/50 p-5 rounded-xl border border-indigo-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-extrabold text-indigo-950 text-sm flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                        Attach Supporting Evidence for Submitted Report
+                      </h4>
+                      <p className="text-xs text-indigo-700">Upload images, inspection documents, or PDFs to attach directly to this supervisor report.</p>
+                    </div>
+                    <button onClick={() => setCreatedReportForEvidence(null)} className="text-xs text-indigo-600 hover:underline font-bold">Dismiss</button>
+                  </div>
+                  <EvidenceUploader reportId={createdReportForEvidence.id} onUploadSuccess={() => invalidateQueries([["reports"]])} />
+                </div>
+              )}
+            </div>
+
+            {/* Previously Submitted Supervisor Reports */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider">
+                Submitted Supervisory Reports Queue
+              </h3>
+              <div className="space-y-3">
+                {reports.filter(r => r.submitterId === profile?.id).map(r => (
+                  <div key={r.id} className="p-4 border border-slate-200 rounded-xl hover:border-slate-300 transition bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-black bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 uppercase">
+                          {r.reportType || 'SUPERVISOR REPORT'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{new Date(r.submittedAt).toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-medium line-clamp-2 max-w-xl">
+                        {r.notes || 'No description notes provided'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setSelectedReport(r)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer"
+                      >
+                        VIEW WORKSPACE
+                      </button>
+                      <button
+                        onClick={() => generateReportPDF(r)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white hover:bg-slate-800 cursor-pointer flex items-center gap-1"
+                      >
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {reports.filter(r => r.submitterId === profile?.id).length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-6">No supervisory reports created yet. Use the auto-compiler or form above to issue a report.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+        
+          {/* Right Column - Approval Queue */}
+          <div className="md:col-span-4 flex flex-col gap-6 md:min-h-0 md:h-full h-auto overflow-visible md:overflow-hidden">
+            <div className="bg-white rounded-2xl border border-amber-200 shadow-sm flex flex-col shrink-0 overflow-hidden h-full">
+              <div className="p-4 border-b border-amber-100 bg-amber-50/70 rounded-t-2xl flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-amber-600 animate-pulse" />
+                <h3 className="font-black text-amber-900 text-sm">Action Required ({pendingApprovals.length})</h3>
+              </div>
+              <div className="p-4 space-y-3 overflow-y-auto flex-1">
+                {pendingApprovals.map(r => (
+                  <div key={r.id} className="p-3 bg-white border border-amber-100 rounded-xl hover:border-amber-200 shadow-xs">
+                    <p className="text-xs font-bold text-slate-800">{r.task?.title || 'Report'}</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Submitted by: {r.submitter?.firstName || ''} {r.submitter?.lastName || ''}</p>
+                    
+                    <button 
+                      onClick={() => {
+                        const matchedTask = tasks.find(t => t.id === r.taskId);
+                        if (matchedTask) setSelectedDetailTask(matchedTask);
+                      }}
+                      className="mt-2.5 text-[10px] font-black text-amber-600 hover:text-amber-800 transition uppercase tracking-wider flex items-center gap-1 cursor-pointer w-full justify-center bg-amber-50 py-1.5 rounded-lg border border-amber-100"
+                    >
+                      REVIEW SUBMISSION &rarr;
+                    </button>
+                  </div>
+                ))}
+                {pendingApprovals.length === 0 && <p className="text-xs text-slate-500 text-center py-4">No pending approvals</p>}
+              </div>
+            </div>
+          </div>
+
+      {/* Assign Task Modal */}
       {isAssignModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden animate-scaleIn">
-            <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
-              <h3 className="font-extrabold text-lg tracking-tight">Dispatch New Task</h3>
+        <div 
+          className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsAssignModalOpen(false); }}
+        >
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleIn flex flex-col max-h-[85vh]">
+            <div className="bg-slate-900 text-white p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAssignModalOpen(false)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Back to Default View"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+                <h2 className="font-black text-lg flex items-center gap-2"><Plus className="w-5 h-5 text-indigo-400" /> Dispatch New Task</h2>
+              </div>
               <button 
                 type="button"
                 onClick={() => setIsAssignModalOpen(false)} 
-                className="text-slate-400 hover:text-white transition text-2xl font-bold leading-none cursor-pointer"
+                className="p-1.5 hover:bg-slate-800 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold text-slate-300"
+                title="Close Window"
               >
-                &times;
+                <span>Close</span>
+                <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
             
-            <form onSubmit={handleAssignTask} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
-                <input 
-                  type="text" 
-                  required
-                  value={assignForm.title}
-                  onChange={e => setAssignForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g. Jinja Depot stock auditing visit"
-                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Description & Guidelines</label>
-                <textarea 
-                  required
-                  value={assignForm.description}
-                  onChange={e => setAssignForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Provide precise guidelines, verification geofences, and evidence criteria..."
-                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 h-20 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
-                ></textarea>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Target Location (Area)</label>
-                <input 
-                  type="text" 
-                  value={assignForm.targetLocationName}
-                  onChange={e => setAssignForm(prev => ({ ...prev, targetLocationName: e.target.value }))}
-                  placeholder="e.g. Kampala, Mukono"
-                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <div className="overflow-y-auto flex-1">
+              <form onSubmit={handleAssignTask} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Category</label>
-                  <select 
-                    value={assignForm.category}
-                    onChange={e => setAssignForm(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
-                  >
-                    <option value="Stock Count">Stock Count</option>
-                    <option value="Merchandising">Merchandising</option>
-                    <option value="Promotion Survey">Promotion Survey</option>
-                    <option value="Competitor Audit">Competitor Audit</option>
-                    <option value="Quality Control">Quality Control</option>
-                    <option value="General Audit">General Audit</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Type</label>
-                  <select 
-                    value={assignForm.taskType}
-                    onChange={e => setAssignForm(prev => ({ ...prev, taskType: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
-                  >
-                    <option value="STOCK_AUDIT">Stock Audit</option>
-                    <option value="MERCHANDISING">Merchandising Visit</option>
-                    <option value="GENERAL_VISIT">General Visit</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
-                  <select 
-                    value={assignForm.priority}
-                    onChange={e => setAssignForm(prev => ({ ...prev, priority: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Title</label>
                   <input 
-                    type="date" 
+                    type="text" 
                     required
-                    value={assignForm.dueDate}
-                    onChange={e => setAssignForm(prev => ({ ...prev, dueDate: e.target.value }))}
-                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800"
+                    value={assignForm.title}
+                    onChange={e => setAssignForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="e.g. Jinja Depot stock auditing visit"
+                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Assign To Officer</label>
-                <select 
-                  required
-                  value={assignForm.assignedTo}
-                  onChange={e => setAssignForm(prev => ({ ...prev, assignedTo: e.target.value }))}
-                  className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
-                >
-                  {subordinates.length === 0 ? (
-                    <option value="">No department officers found</option>
-                  ) : (
-                    subordinates.map(sub => (
-                      <option key={sub.id} value={sub.id}>{sub.firstName} {sub.lastName} ({sub.jobTitle || 'Field Officer'})</option>
-                    ))
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Description & Guidelines</label>
+                  <textarea 
+                    required
+                    value={assignForm.description}
+                    onChange={e => setAssignForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Provide precise guidelines, verification geofences, and evidence criteria..."
+                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 h-20 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800"
+                  ></textarea>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Target Location (Area)</label>
+                  <input 
+                    type="text" 
+                    value={assignForm.targetLocationName}
+                    onChange={e => setAssignForm(prev => ({ ...prev, targetLocationName: e.target.value }))}
+                    placeholder="e.g. Kampala, Mukono"
+                    className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-slate-950 text-slate-800 mb-3"
+                  />
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Pinpoint on Map</label>
+                  <MapLocationPicker 
+                    onLocationSelected={(lat, lng) => setAssignForm(prev => ({ ...prev, targetLocationLat: lat, targetLocationLng: lng }))}
+                    initialLat={assignForm.targetLocationLat || undefined}
+                    initialLng={assignForm.targetLocationLng || undefined}
+                  />
+                  {assignForm.targetLocationLat && assignForm.targetLocationLng && (
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1">
+                      Target Pinned: {assignForm.targetLocationLat.toFixed(5)}, {assignForm.targetLocationLng.toFixed(5)}
+                    </p>
                   )}
-                </select>
-              </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Category</label>
+                    <select 
+                      value={assignForm.category}
+                      onChange={e => setAssignForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
+                    >
+                      <option value="Stock Count">Stock Count</option>
+                      <option value="Merchandising">Merchandising</option>
+                      <option value="Promotion Survey">Promotion Survey</option>
+                      <option value="Competitor Audit">Competitor Audit</option>
+                      <option value="Quality Control">Quality Control</option>
+                      <option value="General Audit">General Audit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Task Type</label>
+                    <select 
+                      value={assignForm.taskType}
+                      onChange={e => setAssignForm(prev => ({ ...prev, taskType: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
+                    >
+                      <option value="STOCK_AUDIT">Stock Audit</option>
+                      <option value="MERCHANDISING">Merchandising Visit</option>
+                      <option value="GENERAL_VISIT">General Visit</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Priority</label>
+                    <select 
+                      value={assignForm.priority}
+                      onChange={e => setAssignForm(prev => ({ ...prev, priority: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800 bg-white"
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                      <option value="CRITICAL">Critical</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Due Date</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={assignForm.dueDate}
+                      onChange={e => setAssignForm(prev => ({ ...prev, dueDate: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg p-2.5 outline-none text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Assign To Officer</label>
+                  <SearchableSelect
+                    options={subordinates.map(sub => ({ value: sub.id, label: `${sub.firstName} ${sub.lastName} (${sub.jobTitle || 'Field Officer'})` }))}
+                    value={assignForm.assignedTo}
+                    onChange={(val) => setAssignForm(prev => ({ ...prev, assignedTo: val }))}
+                    placeholder={subordinates.length === 0 ? "No department officers found" : "Select an officer..."}
+                    disabled={subordinates.length === 0}
+                  />
+                </div>
 
               <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
                 <button 
@@ -873,11 +1207,20 @@ export default function SupervisorDashboard() {
             </form>
           </div>
         </div>
+        </div>
       )}
 
       {/* Task Details & Timeline Drawer Modal */}
       {selectedDetailTask && (
-        <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEditingTask(false);
+              setSelectedDetailTask(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleIn flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="bg-slate-900 text-white p-5 flex justify-between items-start shrink-0">
@@ -889,38 +1232,65 @@ export default function SupervisorDashboard() {
                   <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border ${getStatusBadgeStyle(selectedDetailTask.extendedStatus)}`}>
                     {selectedDetailTask.extendedStatus}
                   </span>
+                  
                   {!isEditingTask && (
-                    <button 
-                      onClick={() => {
-                        setEditTaskForm({
-                          title: selectedDetailTask.title,
-                          description: selectedDetailTask.description,
-                          dueDate: selectedDetailTask.dueDate ? new Date(selectedDetailTask.dueDate).toISOString().split('T')[0] : '',
-                          targetLocationLat: selectedDetailTask.targetLocationLat || '',
-                          targetLocationLng: selectedDetailTask.targetLocationLng || '',
-                          targetLocationName: selectedDetailTask.targetLocationName || ''
-                        });
-                        setIsEditingTask(true);
-                      }}
-                      className="ml-2 text-[10px] font-bold bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 px-2 py-0.5 rounded transition cursor-pointer"
-                    >
-                      EDIT TASK
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => {
+                          setEditTaskForm({
+                            title: selectedDetailTask.title,
+                            description: selectedDetailTask.description,
+                            dueDate: selectedDetailTask.dueDate ? new Date(selectedDetailTask.dueDate).toISOString().split('T')[0] : '',
+                            targetLocationLat: selectedDetailTask.targetLocationLat || '',
+                            targetLocationLng: selectedDetailTask.targetLocationLng || '',
+                            targetLocationName: selectedDetailTask.targetLocationName || ''
+                          });
+                          setIsEditingTask(true);
+                        }}
+                        className="ml-2 text-[10px] font-bold bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 px-2 py-0.5 rounded transition cursor-pointer"
+                      >
+                        EDIT TASK
+                      </button>
+                      <button 
+                        onClick={() => setTaskToDelete(selectedDetailTask)}
+                        className="ml-2 text-[10px] font-bold bg-red-600/20 text-red-300 hover:bg-red-600/40 px-2 py-0.5 rounded transition cursor-pointer flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        DELETE TASK
+                      </button>
+                    </>
                   )}
+
                 </div>
                 <h3 className="font-extrabold text-lg tracking-tight leading-snug">{selectedDetailTask.title}</h3>
                 <p className="text-xs text-slate-400">Assigned Officer: {selectedDetailTask.assignee?.firstName} {selectedDetailTask.assignee?.lastName}</p>
               </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  setIsEditingTask(false);
-                  setSelectedDetailTask(null);
-                }} 
-                className="text-slate-400 hover:text-white transition text-2xl font-black leading-none p-1 cursor-pointer"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsEditingTask(false);
+                    setSelectedDetailTask(null);
+                  }} 
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Back to Default View"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsEditingTask(false);
+                    setSelectedDetailTask(null);
+                  }} 
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Close Window"
+                >
+                  <span>Close</span>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             {/* Body */}
@@ -1140,10 +1510,12 @@ export default function SupervisorDashboard() {
             {/* Actions Footer */}
             <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-2 shrink-0">
               <button 
+                type="button"
                 onClick={() => setSelectedDetailTask(null)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                className="px-4 py-2 border border-slate-200 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-black text-slate-800 transition cursor-pointer flex items-center gap-1.5"
               >
-                CLOSE WINDOW
+                <ArrowLeft className="w-4 h-4" />
+                <span>BACK TO LIST / CANCEL</span>
               </button>
               
               {selectedDetailTask.extendedStatus === 'Approved' && (
@@ -1207,6 +1579,286 @@ export default function SupervisorDashboard() {
           </div>
         </div>
       )}
+
+      {/* Professional Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setTaskToDelete(null); }}
+        >
+          <div className="bg-slate-900 text-white rounded-3xl max-w-lg w-full border border-slate-800 shadow-2xl overflow-hidden transform transition-all animate-scaleIn">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-900 p-6 border-b border-slate-800 flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-red-500/20 text-red-400 rounded-2xl border border-red-500/30 shrink-0 shadow-lg shadow-red-950/50">
+                  <Trash2 className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-black uppercase tracking-wider mb-1">
+                    <ShieldAlert className="w-3 h-3 text-red-400" /> DESTRUCTIVE ACTION
+                  </div>
+                  <h3 className="text-xl font-black text-white tracking-tight">Delete Dispatched Task</h3>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setTaskToDelete(null)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Back to Task List"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setTaskToDelete(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Close Window"
+                >
+                  <span>Close</span>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                You are about to permanently remove this dispatched task. Please review the details below before proceeding with deletion.
+              </p>
+
+              {/* Task Summary Card */}
+              <div className="bg-slate-800/90 rounded-2xl p-4 border border-slate-700 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/80 pb-2.5">
+                  <span className="text-[10px] font-black uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded-md">
+                    {taskToDelete.category || 'General'}
+                  </span>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border ${
+                    taskToDelete.priority === 'CRITICAL' ? 'bg-red-500/20 text-red-300 border-red-500/30' :
+                    taskToDelete.priority === 'HIGH' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+                    'bg-slate-700 text-slate-300 border-slate-600'
+                  }`}>
+                    {taskToDelete.priority || 'NORMAL'} PRIORITY
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-extrabold text-white leading-snug">{taskToDelete.title}</h4>
+                  {taskToDelete.description && (
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{taskToDelete.description}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-700/80">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Assigned Officer</span>
+                    <span className="font-bold text-slate-200">
+                      {taskToDelete.assignee?.firstName ? `${taskToDelete.assignee.firstName} ${taskToDelete.assignee.lastName || ''}` : 'Field Officer'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Target Location</span>
+                    <span className="font-bold text-slate-200 truncate block">
+                      {taskToDelete.targetLocationName || taskToDelete.locationName || 'Jurisdiction Area'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Operational Warning Box */}
+              <div className="bg-red-950/40 border border-red-800/50 rounded-2xl p-3.5 text-xs space-y-1.5 text-red-200">
+                <div className="font-bold flex items-center gap-1.5 text-red-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>Operational Impact Warning</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-red-300/90 leading-normal pl-1">
+                  <li>Active dispatch authority for this field officer will be immediately revoked.</li>
+                  <li>Pending evidence submissions and task progress logs will be permanently deleted.</li>
+                  <li>This action cannot be undone.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="bg-slate-950 p-5 border-t border-slate-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isDeletingTask}
+                onClick={() => setTaskToDelete(null)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Cancel / Go Back</span>
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTask}
+                onClick={handleExecuteDeleteTask}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer shadow-lg shadow-red-950/80 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingTask ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    Deleting Task...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Permanently Delete Task
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Professional Email Report Dispatch Modal */}
+      {reportToEmail && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setReportToEmail(null); }}
+        >
+          <div className="bg-slate-900 text-white rounded-3xl max-w-lg w-full border border-slate-800 shadow-2xl overflow-hidden transform transition-all animate-scaleIn">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-slate-900 p-6 border-b border-slate-800 flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30 shrink-0 shadow-lg shadow-indigo-950/50">
+                  <Send className="w-6 h-6 text-indigo-400" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-wider mb-1">
+                    <ShieldCheck className="w-3 h-3 text-indigo-400" /> GMAIL INTEGRATION
+                  </div>
+                  <h3 className="text-xl font-black text-white tracking-tight">Email PDF Audit Report</h3>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setReportToEmail(null)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Back to Default View"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setReportToEmail(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Close Window"
+                >
+                  <span>Close</span>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Dispatch an official PDF report directly via your authenticated Google Workspace account.
+              </p>
+
+              {/* Recipient Input */}
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold text-slate-200 uppercase tracking-wider block">
+                  Recipient Email Address
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    placeholder="e.g. director@movitgroup.com"
+                    value={emailRecipientInput}
+                    onChange={(e) => setEmailRecipientInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Contacts Suggestion Pills */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Quick Recipient Selection:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'christianekarel@gmail.com',
+                    'simpson.birungi@movitgroup.com',
+                    'james.munene@movitgroup.com',
+                    'bruce.mpamizo@movitgroup.com',
+                    'adard.mukiibi@movitgroup.com'
+                  ].map((email) => (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => setEmailRecipientInput(email)}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                        emailRecipientInput === email
+                          ? 'bg-indigo-600 text-white border-indigo-500 font-bold'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      {email.split('@')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Report Summary Card */}
+              <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 space-y-2.5">
+                <div className="flex items-center justify-between text-xs border-b border-slate-700/80 pb-2">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Report Subject</span>
+                  <span className="text-indigo-300 font-extrabold text-[11px]">
+                    {reportToEmail.task?.title || reportToEmail.reportType || 'Audit Summary'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Attachment</span>
+                  <span className="text-emerald-400 font-extrabold text-[11px] flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5" />
+                    Audit_Report_{reportToEmail.id?.substring(0, 8) || 'Export'}.pdf
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="bg-slate-950 p-5 border-t border-slate-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isEmailing}
+                onClick={() => setReportToEmail(null)}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Cancel / Go Back</span>
+              </button>
+              <button
+                type="button"
+                disabled={isEmailing || !emailRecipientInput}
+                onClick={handleExecuteEmailReport}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer shadow-lg shadow-indigo-950/80 flex items-center gap-2 disabled:opacity-50"
+              >
+                {isEmailing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    Sending Email...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send Email Report
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time worker radar overlay */}
+      <LiveWorkerMapOverlay />
 </div>
   );
 }

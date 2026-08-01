@@ -482,6 +482,47 @@ router.get('/templates', async (req: any, res: any) => {
 });
 
 // Create task template
+
+// Delete task
+router.delete('/:id', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    
+    const existingTask = await db.query.tasks.findFirst({
+      where: eq(tasks.id, id)
+    });
+    
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const roleMatch = req.dbUser.role?.name || '';
+    if (roleMatch === 'Field Staff') {
+        return res.status(403).json({ error: 'Field staff are not allowed to delete tasks' });
+    }
+
+    await db.delete(tasks).where(eq(tasks.id, id));
+
+    logAudit(
+      req.dbUser.id,
+      'TASK_DELETED',
+      req.ip,
+      {
+        resourceType: 'TASK',
+        resourceId: id,
+        details: {
+          title: existingTask.title
+        }
+      }
+    );
+
+    res.json({ success: true, message: 'Task deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
 router.post('/templates', async (req: any, res: any) => {
   try {
     const { title, description, taskType, priority, escalationLevel } = req.body;

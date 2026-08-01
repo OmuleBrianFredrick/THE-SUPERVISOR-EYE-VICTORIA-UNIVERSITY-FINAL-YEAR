@@ -9,6 +9,7 @@ import {
 import EvidenceUploader from '../features/EvidenceUploader';
 import EvidenceGallery from '../features/EvidenceGallery';
 import BarcodeScanner from '../features/BarcodeScanner';
+import TargetLocationMap from '../features/TargetLocationMap';
 import { 
   cacheTasks, 
   getCachedTasks, 
@@ -34,6 +35,14 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 
   return R * c; // in metres
 }
+
+
+const isTaskExpiredCheck = (dueDateStr?: string) => {
+  if (!dueDateStr) return false;
+  const dueDate = new Date(dueDateStr);
+  dueDate.setHours(23, 59, 59, 999);
+  return dueDate.getTime() < Date.now();
+};
 
 export default function FieldStaffDashboard() {
   const { getToken, profile } = useAuth();
@@ -173,6 +182,18 @@ export default function FieldStaffDashboard() {
   }, []);
 
   const handleExecuteTask = async (task: any) => {
+
+    const isTaskExpired = (dueDateStr: string) => {
+      if (!dueDateStr) return false;
+      const dueDate = new Date(dueDateStr);
+      dueDate.setHours(23, 59, 59, 999);
+      return dueDate.getTime() < Date.now();
+    };
+
+    if (task.dueDate && isTaskExpired(task.dueDate)) {
+      showErrorToast("This task has expired. Due date has passed and uploads are locked.");
+      return;
+    }
     if (['Pending Approval', 'Awaiting Review', 'Approved', 'Completed'].includes(task.extendedStatus)) {
       showErrorToast(`This task is ${task.extendedStatus.toLowerCase()} and cannot be modified.`);
       return;
@@ -753,10 +774,12 @@ export default function FieldStaffDashboard() {
                       <button 
                         onClick={() => handleExecuteTask(t)} 
                         disabled={checkingInTaskId === t.id}
-                        className="bg-slate-900 hover:bg-slate-850 text-white text-xs font-extrabold px-4 py-1.5 rounded-lg transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      >
+                        className={`text-white text-xs font-extrabold px-4 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-sm ${isTaskExpiredCheck(t.dueDate) ? 'bg-slate-400 cursor-pointer opacity-70' : 'bg-slate-900 hover:bg-slate-850 cursor-pointer disabled:opacity-50'}`}
+                                              >
                         {checkingInTaskId === t.id ? (
                           <><RefreshCw className="w-3 h-3 animate-spin" /> CHECKING IN...</>
+                        ) : isTaskExpiredCheck(t.dueDate) ? (
+                          'EXPIRED'
                         ) : (
                           'EXECUTE & UPLOAD'
                         )}
@@ -926,6 +949,16 @@ export default function FieldStaffDashboard() {
                     {selectedDetailTask.description}
                   </p>
                 </div>
+
+                {selectedDetailTask.targetLocationLat && selectedDetailTask.targetLocationLng && (
+                  <div className="bg-slate-50 p-1 rounded-xl border border-slate-100 mb-2">
+                     <TargetLocationMap 
+                       lat={parseFloat(selectedDetailTask.targetLocationLat)} 
+                       lng={parseFloat(selectedDetailTask.targetLocationLng)} 
+                       locationName={selectedDetailTask.targetLocationName}
+                     />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <div>
@@ -1098,9 +1131,9 @@ export default function FieldStaffDashboard() {
                     handleExecuteTask(task);
                   }}
                   disabled={rejectionCount >= 5}
-                  className={`text-white text-xs font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm ${rejectionCount >= 5 ? 'bg-slate-400 opacity-50 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'}`}
+                  className={`text-white text-xs font-extrabold px-5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm ${rejectionCount >= 5 ? 'bg-slate-400 opacity-50 cursor-not-allowed' : isTaskExpiredCheck(selectedDetailTask.dueDate) ? 'bg-slate-400 cursor-pointer opacity-70' : 'bg-slate-900 hover:bg-slate-800 cursor-pointer'}`}
                 >
-                  {rejectionCount >= 5 ? <><AlertCircle className="w-3.5 h-3.5" /> MAX REVISIONS EXCEEDED</> : 'EXECUTE & UPLOAD'}
+                  {rejectionCount >= 5 ? <><AlertCircle className="w-3.5 h-3.5" /> MAX REVISIONS EXCEEDED</> : isTaskExpiredCheck(selectedDetailTask.dueDate) ? 'EXPIRED' : 'EXECUTE & UPLOAD'}
                 </button>
                 );
               })()}

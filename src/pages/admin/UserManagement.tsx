@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { Loader2, Search, Edit2, ShieldAlert } from "lucide-react";
-import { useUsersQuery } from "../../hooks/useQueries";
+import React, { useState, useEffect } from "react";
+import { Loader2, Search, Edit2, ShieldAlert, ArrowLeft, X } from "lucide-react";
+import { SearchableSelect } from "../../components/ui/SearchableSelect";
+import { useUsersQuery, useRolesQuery, useDepartmentsQuery } from "../../hooks/useQueries";
 
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -9,14 +10,35 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function UserManagement() {
   const { data: usersResponse, isLoading: loading } = useUsersQuery();
+  const { data: rolesResponse } = useRolesQuery();
+  const { data: departmentsResponse } = useDepartmentsQuery();
+  
   const users = usersResponse?.data || usersResponse || [];
+  const roles = rolesResponse?.data || rolesResponse || [];
+  const departments = departmentsResponse?.data || departmentsResponse || [];
+  
   const [search, setSearch] = useState('');
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [tempPassword, setTempPassword] = useState('');
+  
+  const [editRoleId, setEditRoleId] = useState('');
+  const [editDepartmentId, setEditDepartmentId] = useState('');
+  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editManagerId, setEditManagerId] = useState('');
+  
   const { getToken } = useAuth();
   const { success: showSuccess, error: showError } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (selectedUser) {
+      setEditRoleId(selectedUser.roleId || '');
+      setEditDepartmentId(selectedUser.departmentId || '');
+      setEditJobTitle(selectedUser.jobTitle || '');
+      setEditManagerId(selectedUser.managerId || '');
+    }
+  }, [selectedUser]);
 
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string, data: any }) => {
@@ -71,6 +93,22 @@ export default function UserManagement() {
   const handleUpdateStatus = (status: string) => {
     if (!selectedUser) return;
     updateUserMutation.mutate({ id: selectedUser.id, data: { status } });
+  };
+
+  const handleUpdatePosition = () => {
+    if (!selectedUser) return;
+    
+    // Convert empty strings to null or undefined as appropriate if required,
+    // but the API usually handles strings for UUIDs or nulls.
+    updateUserMutation.mutate({ 
+      id: selectedUser.id, 
+      data: { 
+        roleId: editRoleId || null, 
+        departmentId: editDepartmentId || null, 
+        jobTitle: editJobTitle || null, 
+        managerId: editManagerId || null 
+      } 
+    });
   };
 
   const handleResetPassword = () => {
@@ -176,12 +214,38 @@ export default function UserManagement() {
         )}
       
       {selectedUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h2 className="text-lg font-bold text-slate-800">Manage User</h2>
-              <button onClick={() => { setSelectedUser(null); setTempPassword(''); }} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedUser(null);
+              setTempPassword('');
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scaleIn border border-slate-200">
+            {/* Header with Back and Close */}
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={() => { setSelectedUser(null); setTempPassword(''); }} 
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                  title="Back to User List"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back</span>
+                </button>
+                <h2 className="text-base font-black text-slate-800 ml-1">Manage User Account</h2>
+              </div>
+              <button 
+                type="button"
+                onClick={() => { setSelectedUser(null); setTempPassword(''); }} 
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Close Window"
+              >
+                <span className="hidden sm:inline">Close</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
             
@@ -217,6 +281,63 @@ export default function UserManagement() {
                 </div>
               </div>
 
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Position & Role</h4>
+                
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Role (Permissions)</label>
+                  <SearchableSelect
+                    options={roles.map((r: any) => ({ value: r.id, label: r.name }))}
+                    value={editRoleId}
+                    onChange={(val) => setEditRoleId(val)}
+                    placeholder="-- Select Role --"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Department</label>
+                  <SearchableSelect
+                    options={departments.map((d: any) => ({ value: d.id, label: d.name }))}
+                    value={editDepartmentId}
+                    onChange={(val) => setEditDepartmentId(val)}
+                    placeholder="-- Select Department --"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Job Title</label>
+                  <input 
+                    type="text"
+                    value={editJobTitle}
+                    onChange={(e) => setEditJobTitle(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Direct Supervisor</label>
+                  <SearchableSelect
+                    options={[
+                      { value: "", label: "-- No Supervisor --" },
+                      ...users
+                        .filter((u: any) => u.id !== selectedUser.id)
+                        .map((u: any) => ({ value: u.id, label: `${u.firstName} ${u.lastName} (${u.jobTitle || 'Field Staff'})` }))
+                    ]}
+                    value={editManagerId}
+                    onChange={(val) => setEditManagerId(val)}
+                    placeholder="-- No Supervisor --"
+                  />
+                </div>
+                
+                <button
+                  onClick={handleUpdatePosition}
+                  disabled={updateUserMutation.isPending}
+                  className="w-full py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {updateUserMutation.isPending ? 'Saving...' : 'Save Position Details'}
+                </button>
+              </div>
+
               <div className="space-y-3 pt-4 border-t border-slate-100">
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Manual Password Reset</h4>
                 <p className="text-xs text-slate-500">
@@ -233,13 +354,32 @@ export default function UserManagement() {
                   <button
                     onClick={handleResetPassword}
                     disabled={resetPasswordMutation.isPending || tempPassword.length < 6}
-                    className="px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-slate-800 text-white text-sm font-bold rounded-lg hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
                   >
                     {resetPasswordMutation.isPending ? 'Resetting...' : 'Reset'}
                   </button>
                 </div>
               </div>
 
+            </div>
+
+            {/* Footer with explicit Back/Cancel button */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => { setSelectedUser(null); setTempPassword(''); }}
+                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Default View
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSelectedUser(null); setTempPassword(''); }}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-xl text-xs transition cursor-pointer"
+              >
+                Close Window
+              </button>
             </div>
           </div>
         </div>

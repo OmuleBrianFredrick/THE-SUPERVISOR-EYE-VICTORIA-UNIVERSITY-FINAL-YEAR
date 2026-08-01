@@ -7,6 +7,7 @@ import { AuthGuard, RoleGuard } from './components/auth/AuthGuard';
 import IframeBreakoutBanner from './components/IframeBreakoutBanner';
 import SessionTimeout from './components/auth/SessionTimeout';
 import LivePushNotifications from './components/LivePushNotifications';
+import AutomaticLocationTracker from './components/AutomaticLocationTracker';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Pages
@@ -45,6 +46,7 @@ export default function App() {
           <IframeBreakoutBanner />
           <SessionTimeout />
           <LivePushNotifications />
+          <AutomaticLocationTracker />
           <ErrorBoundary>
             <Routes>
           {/* Public Routes */}

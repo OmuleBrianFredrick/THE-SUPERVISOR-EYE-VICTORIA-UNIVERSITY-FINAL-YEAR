@@ -123,27 +123,7 @@ if (hasApiKey) {
 }
 
 function runMockGooglePicker() {
-  const msg = `Choose a Movit Group account to simulate Google Sign-In:\n\n` + 
-              `1. christianekarel@gmail.com (IT Support & admin)\n` +
-              `2. simpson.birungi@movitgroup.com (Executive Chairman)\n` +
-              `3. james.munene@movitgroup.com (CEO)\n` +
-              `4. bruce.mpamizo@movitgroup.com (Executive Director)\n` +
-              `5. adard.mukiibi@movitgroup.com (CFO)\n\n` +
-              `Or enter any other Gmail/Google email address directly.\n\n` +
-              `Enter email directly or choose a number (1-5):`;
-              
-  const choice = typeof window !== 'undefined' ? window.prompt(msg, 'christianekarel@gmail.com') : 'christianekarel@gmail.com';
-  let selectedEmail = 'christianekarel@gmail.com';
-  
-  if (choice) {
-    const trimmed = choice.trim();
-    if (trimmed === '1') selectedEmail = 'christianekarel@gmail.com';
-    else if (trimmed === '2') selectedEmail = 'simpson.birungi@movitgroup.com';
-    else if (trimmed === '3') selectedEmail = 'james.munene@movitgroup.com';
-    else if (trimmed === '4') selectedEmail = 'bruce.mpamizo@movitgroup.com';
-    else if (trimmed === '5') selectedEmail = 'adard.mukiibi@movitgroup.com';
-    else if (trimmed.includes('@')) selectedEmail = trimmed;
-  }
+  const selectedEmail = 'christianekarel@gmail.com';
   
   // Consistent mock UID based on email so that we look up the same user in database after logouts!
   const selectedUid = 'mock-google-' + btoa(selectedEmail).replace(/[^a-zA-Z0-9]/g, '').substring(0, 40);

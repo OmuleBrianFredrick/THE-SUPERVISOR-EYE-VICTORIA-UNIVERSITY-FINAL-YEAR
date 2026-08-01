@@ -1,15 +1,65 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router';
-import { TrendingUp, Users, Target, Activity, RefreshCw, BarChart2 } from 'lucide-react';
+import { TrendingUp, Users, Target, Activity, RefreshCw, BarChart2, Send, ShieldAlert, Sparkles, MessageSquare, CheckCircle2, Award, Zap } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { useExecutiveSummaryQuery, useInvalidateQueries } from '../../hooks/useQueries';
 
 export default function ExecutiveDashboard() {
-  const { getToken } = useAuth();
+  const { getToken, profile } = useAuth();
+  const { success: showSuccessToast, error: showErrorToast } = useToast();
   const invalidateQueries = useInvalidateQueries();
   const navigate = useNavigate();
   const { data: stats, isLoading: loading } = useExecutiveSummaryQuery();
+
+  const [isSubmittingDirective, setIsSubmittingDirective] = useState(false);
+  const [directiveForm, setDirectiveForm] = useState({
+    recipientScope: 'All Departments & Field Leadership',
+    title: '',
+    priority: 'NORMAL',
+    feedbackText: ''
+  });
+  const [submittedDirectives, setSubmittedDirectives] = useState<any[]>([]);
+
+  const handleIssueDirective = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directiveForm.title.trim() || !directiveForm.feedbackText.trim()) {
+      showErrorToast('Please enter both title and executive feedback text');
+      return;
+    }
+    setIsSubmittingDirective(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/v1/reports/directives', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(directiveForm)
+      });
+      if (res.ok) {
+        const newDirective = await res.json();
+        showSuccessToast('Executive directive & feedback issued to target leadership!');
+        setSubmittedDirectives(prev => [newDirective, ...prev]);
+        setDirectiveForm({
+          recipientScope: 'All Departments & Field Leadership',
+          title: '',
+          priority: 'NORMAL',
+          feedbackText: ''
+        });
+        invalidateQueries([["reports"]]);
+      } else {
+        const err = await res.json();
+        showErrorToast(err.error || 'Failed to issue executive directive');
+      }
+    } catch (e) {
+      showErrorToast('Error connecting to executive directive endpoint');
+    } finally {
+      setIsSubmittingDirective(false);
+    }
+  };
 
   if (loading || !stats) return <div className="p-8 flex justify-center text-slate-400"><RefreshCw className="w-8 h-8 animate-spin" /></div>;
 
@@ -153,10 +203,123 @@ export default function ExecutiveDashboard() {
              });
              invalidateQueries([["analytics", "executive-summary"]]);
            }}
-           className="mt-4 w-full bg-amber-900 text-white text-xs font-bold py-3 rounded-xl hover:bg-amber-800 transition shadow-sm"
+           className="mt-4 w-full bg-amber-900 text-white text-xs font-bold py-3 rounded-xl hover:bg-amber-800 transition shadow-sm cursor-pointer"
          >
             GENERATE FULL REPORT
          </button>
+      </div>
+
+      {/* Top Management (CEO & MD) Feedback & Executive Directives Portal */}
+      <div className="md:col-span-12 bg-slate-900 text-white rounded-3xl p-6 md:p-8 border border-slate-800 shadow-xl space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-5">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold uppercase tracking-wider mb-2">
+              <Zap className="w-3.5 h-3.5 text-indigo-400" /> EXECUTIVE GOVERNANCE & FEEDBACK PORTAL
+            </div>
+            <h3 className="text-2xl font-black text-white tracking-tight">Issue Executive Directive & Management Feedback</h3>
+            <p className="text-slate-400 text-xs mt-1 max-w-2xl">
+              Provides Managing Directors, CEOs, and Executive Leadership with direct organizational computation analysis and feedback tools to guide departmental performance and communicate strategic directives to subordinates.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 bg-slate-800/80 px-4 py-2.5 rounded-2xl border border-slate-700/80">
+            <Award className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <div className="text-[10px] text-slate-400 font-bold uppercase">Executive Authority</div>
+              <div className="text-xs font-extrabold text-white">{profile?.jobTitle || profile?.role || 'Managing Director & CEO'}</div>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleIssueDirective} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                Target Recipient Scope
+              </label>
+              <select
+                value={directiveForm.recipientScope}
+                onChange={e => setDirectiveForm(prev => ({ ...prev, recipientScope: e.target.value }))}
+                className="w-full text-xs font-bold border border-slate-700 rounded-xl p-3 bg-slate-800 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="All Departments & Field Leadership">All Departments & Field Leadership</option>
+                <option value="Department Managers Only">Department Managers Only</option>
+                <option value="Division & Area Supervisors">Division & Area Supervisors</option>
+                <option value="Field Audit & Compliance Operations">Field Audit & Compliance Operations</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                Directive / Feedback Title
+              </label>
+              <input
+                type="text"
+                required
+                value={directiveForm.title}
+                onChange={e => setDirectiveForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="e.g. Q3 Field Audit Standards & Operations SLA Guidance"
+                className="w-full text-xs font-bold border border-slate-700 rounded-xl p-3 bg-slate-800 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                Priority Level
+              </label>
+              <select
+                value={directiveForm.priority}
+                onChange={e => setDirectiveForm(prev => ({ ...prev, priority: e.target.value }))}
+                className="w-full text-xs font-bold border border-slate-700 rounded-xl p-3 bg-slate-800 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="NORMAL">NORMAL - Standard Guidance</option>
+                <option value="HIGH">HIGH - Urgent Alignment</option>
+                <option value="CRITICAL">CRITICAL - Executive SLA Correction</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+              Executive Guidance, Remarks & Departmental Analysis
+            </label>
+            <textarea
+              required
+              rows={4}
+              value={directiveForm.feedbackText}
+              onChange={e => setDirectiveForm(prev => ({ ...prev, feedbackText: e.target.value }))}
+              placeholder="Enter executive feedback regarding departmental task velocities, evidence compliance rates, and strategic directives for subordinate managers..."
+              className="w-full text-xs font-medium border border-slate-700 rounded-xl p-3.5 bg-slate-800/90 text-white outline-none focus:ring-2 focus:ring-indigo-500"
+            ></textarea>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={isSubmittingDirective}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-7 py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition cursor-pointer shadow-lg flex items-center gap-2 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4 text-emerald-400" />
+              {isSubmittingDirective ? 'Broadcasting Directive...' : 'Broadcast Directive & Feedback'}
+            </button>
+          </div>
+        </form>
+
+        {submittedDirectives.length > 0 && (
+          <div className="pt-4 border-t border-slate-800 space-y-3">
+            <h4 className="text-xs font-black uppercase text-indigo-400 tracking-wider">Recently Issued Directives & Broadcasts</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {submittedDirectives.map((d, i) => (
+                <div key={d.id || i} className="p-3.5 bg-slate-800/60 rounded-xl border border-slate-700 text-xs">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold text-indigo-300">{d.locationName || 'Executive HQ'}</span>
+                    <span className="text-[10px] text-slate-400">{new Date(d.submittedAt || Date.now()).toLocaleTimeString()}</span>
+                  </div>
+                  <p className="text-slate-300 font-medium line-clamp-2">{d.notes}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

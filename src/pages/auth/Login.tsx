@@ -107,27 +107,8 @@ export default function Login() {
           </div>
         )}
 
-        {/* Quick Demo Login Selector */}
-        <div className="mb-6 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-          <label className="block text-xs font-bold text-amber-900 uppercase mb-1.5 flex items-center justify-between">
-            <span>⚡ Demo Hierarchy Login Picker</span>
-            <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded font-medium">18 Accounts Synced</span>
-          </label>
-          <select 
-            onChange={(e) => e.target.value && handleSelectDemoUser(e.target.value)}
-            className="w-full text-xs bg-white border border-amber-300 rounded-lg p-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-            defaultValue=""
-          >
-            <option value="" disabled>Select a demo role to auto-fill credentials...</option>
-            {demoAccountsList.map((acc) => (
-              <option key={acc.email} value={acc.email}>
-                {acc.label} ({acc.email})
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-amber-700 mt-1 font-sans">
-            Password auto-fills as <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-mono font-bold">Password123!</code>
-          </p>
+        <div className="mb-6 text-center text-lg font-black text-slate-800 tracking-wider">
+          WELCOME TO THE SUPERVISOR EYE
         </div>
 
         <form onSubmit={handleEmailLogin} className="space-y-4">

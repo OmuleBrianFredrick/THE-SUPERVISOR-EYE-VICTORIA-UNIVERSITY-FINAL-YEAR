@@ -3,7 +3,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { 
   Map, MapPin, Search, Shield, Users, AlertTriangle, 
   Activity, ActivityIcon, RefreshCw, Filter, Compass, 
-  Layers, Flame, CheckCircle, Info, ExternalLink, User, CheckSquare 
+  Layers, Flame, CheckCircle, Info, ExternalLink, User, CheckSquare,
+  ArrowLeft, X
 } from 'lucide-react';
 import L from 'leaflet';
 
@@ -664,10 +665,13 @@ export default function GPSCommandCenter() {
             </h3>
             {selectedItem && (
               <button 
+                type="button"
                 onClick={() => setSelectedItem(null)}
-                className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase"
+                className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                title="Back to Default View"
               >
-                Clear
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back</span>
               </button>
             )}
           </div>
@@ -1002,6 +1006,16 @@ export default function GPSCommandCenter() {
                   </div>
                 )}
 
+                <div className="pt-4 border-t border-slate-200 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItem(null)}
+                    className="w-full py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Default Map View
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, MapPin, AlertTriangle, CheckCircle, Video, FileText, BadgeInfo } from 'lucide-react';
+import { Camera, MapPin, AlertTriangle, CheckCircle, Video, FileText, BadgeInfo, Download } from 'lucide-react';
 
 interface Evidence {
   id: string;
@@ -24,6 +24,22 @@ interface EvidenceGalleryProps {
 export default function EvidenceGallery({ evidenceList, isSupervisor = false, onRefresh }: EvidenceGalleryProps) {
   const [selectedItem, setSelectedItem] = useState<Evidence | null>(null);
   const [processing, setProcessing] = useState(false);
+
+  const handleDownload = (item: Evidence) => {
+    if (!item || !item.mediaUrl) return;
+    let ext = '.jpg';
+    if (item.mediaType === 'VIDEO') ext = '.mp4';
+    if (item.mediaType === 'DOCUMENT') ext = '.pdf';
+
+    const link = document.createElement('a');
+    link.href = item.mediaUrl;
+    link.download = `evidence_${item.id || Date.now()}${ext}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleVerify = async (status: string) => {
     if (!selectedItem) return;
@@ -196,16 +212,14 @@ export default function EvidenceGallery({ evidenceList, isSupervisor = false, on
               )}
               
               <div className="mt-4 flex gap-2">
-                <a 
-                  href={selectedItem.mediaUrl} 
-                  download={`evidence-${selectedItem.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-1/2 bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-lg hover:bg-blue-100 transition"
+                <button 
+                  type="button"
+                  onClick={() => handleDownload(selectedItem)}
+                  className="w-1/2 bg-blue-600 text-white flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-lg hover:bg-blue-700 transition cursor-pointer shadow-xs"
                 >
-                  <FileText className="w-4 h-4" /> DOWNLOAD
-                </a>
-                <button onClick={() => setSelectedItem(null)} className="w-1/2 bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-lg hover:bg-slate-300 transition">
+                  <Download className="w-4 h-4" /> DOWNLOAD
+                </button>
+                <button onClick={() => setSelectedItem(null)} className="w-1/2 bg-slate-200 text-slate-700 text-xs font-bold py-2.5 rounded-lg hover:bg-slate-300 transition cursor-pointer">
                   CLOSE
                 </button>
               </div>

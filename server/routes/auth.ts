@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMe, loginSuccess, logout, register, auditLogAction, publicAuditLogAction, getDepartments, getSupervisors } from '../controllers/auth.js';
+import { getMe, loginSuccess, logout, register, auditLogAction, publicAuditLogAction, getDepartments, getSupervisors, pingLocation } from '../controllers/auth.js';
 import { verifyToken, verifyFirebaseTokenOnly } from '../middleware/auth.js';
 import { validate, loginSuccessSchema, registerSchema, auditLogSchema } from '../validations/index.js';
 
@@ -8,6 +8,7 @@ const router = Router();
 router.get('/me', verifyToken, getMe);
 router.post('/login-success', verifyToken, validate(loginSuccessSchema), loginSuccess);
 router.post('/logout', verifyToken, logout);
+router.post('/location-ping', verifyToken, pingLocation);
 router.get('/departments', verifyFirebaseTokenOnly, getDepartments);
 router.get('/supervisors', verifyFirebaseTokenOnly, getSupervisors);
 router.post('/register', verifyFirebaseTokenOnly, validate(registerSchema), register);

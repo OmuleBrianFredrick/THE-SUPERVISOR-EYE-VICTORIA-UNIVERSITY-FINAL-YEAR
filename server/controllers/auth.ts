@@ -4,6 +4,7 @@ import { users, roles, departments, auditLogs, departmentAssignmentHistory } fro
 import { eq, aliasedTable } from 'drizzle-orm';
 import { logAudit } from '../services/audit.js';
 import { auth } from '../firebase.js';
+import { updateLocationStore } from '../services/locationStore.js';
 
 export const getMe = async (req: Request, res: Response) => {
   try {
@@ -305,3 +306,49 @@ export const auditLogAction = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+export const pingLocation = async (req: Request, res: Response) => {
+  try {
+    const { lat, lng, accuracy, speed, heading, isSharing, deviceInfo } = req.body;
+    
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return res.status(400).json({ error: 'Valid lat and lng numbers are required' });
+    }
+
+    const dbUser = req.dbUser;
+    const userRole = req.role?.name || 'Staff';
+    const userDept = req.department?.name || 'Operations';
+
+    const userId = dbUser?.id || req.user?.uid || 'anonymous';
+    const firstName = dbUser?.firstName || req.user?.name?.split(' ')[0] || 'User';
+    const lastName = dbUser?.lastName || req.user?.name?.split(' ').slice(1).join(' ') || '';
+    const email = dbUser?.email || req.user?.email || 'user@movitgroup.com';
+    const employeeNumber = dbUser?.employeeNumber || 'ME-LIVE';
+
+    updateLocationStore({
+      userId,
+      firebaseUid: req.user?.uid,
+      firstName,
+      lastName,
+      email,
+      role: userRole,
+      department: userDept,
+      employeeNumber,
+      lat,
+      lng,
+      accuracy: typeof accuracy === 'number' ? accuracy : null,
+      speed: typeof speed === 'number' ? speed : null,
+      heading: typeof heading === 'number' ? heading : null,
+      updatedAt: new Date().toISOString(),
+      isSharing: isSharing !== false,
+      isRealDevice: true,
+      deviceInfo: deviceInfo || 'Web Client'
+    });
+
+    res.json({ success: true, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('Error handling location ping:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+

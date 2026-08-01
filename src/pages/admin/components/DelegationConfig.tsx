@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, ArrowRight, ShieldCheck, Loader2, X, Calendar, FileText } from 'lucide-react';
+import { Users, Plus, ArrowRight, ShieldCheck, Loader2, X, Calendar, FileText, ArrowLeft } from 'lucide-react';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 
@@ -189,14 +190,29 @@ export default function DelegationConfig() {
 
        {/* CREATE DELEGATION MODAL */}
        {showModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
+          >
              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 <div className="bg-slate-50 border-b border-slate-100 p-5 flex items-center justify-between">
                    <div className="flex items-center gap-3">
-                      <Users className="w-5 h-5 text-slate-700" />
-                      <h3 className="font-black text-slate-800">Delegate Authority</h3>
+                      <button
+                         type="button"
+                         onClick={() => setShowModal(false)}
+                         className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                         title="Back to Default View"
+                      >
+                         <ArrowLeft className="w-3.5 h-3.5" />
+                         <span>Back</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                         <Users className="w-5 h-5 text-slate-700" />
+                         <h3 className="font-black text-slate-800">Delegate Authority</h3>
+                      </div>
                    </div>
-                   <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-lg transition cursor-pointer">
+                   <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-lg transition cursor-pointer flex items-center gap-1 text-xs font-bold">
+                      <span>Close</span>
                       <X className="w-5 h-5" />
                    </button>
                 </div>
@@ -205,35 +221,28 @@ export default function DelegationConfig() {
                    {isAdmin && (
                       <div>
                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Original Officer (Delegator)</label>
-                         <select
+                         <SearchableSelect
+                            options={[
+                               { value: "", label: `Myself (${profile?.firstName} ${profile?.lastName})` },
+                               ...usersList.map((u) => ({ value: u.id, label: `${u.firstName} ${u.lastName} (${u.jobTitle || 'Staff'})` }))
+                            ]}
                             value={delegatorId}
-                            onChange={(e) => setDelegatorId(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
-                         >
-                            <option value="">Myself ({profile?.firstName} {profile?.lastName})</option>
-                            {usersList.map((u) => (
-                               <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.jobTitle || 'Staff'})</option>
-                            ))}
-                         </select>
+                            onChange={(val) => setDelegatorId(val)}
+                            placeholder="Select original officer..."
+                         />
                       </div>
                    )}
 
                    <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Acting Officer (Delegatee) *</label>
-                      <select
-                         required
-                         value={delegateeId}
-                         onChange={(e) => setDelegateeId(e.target.value)}
-                         className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
-                      >
-                         <option value="">Select Staff Member...</option>
-                         {usersList
+                      <SearchableSelect
+                         options={usersList
                             .filter((u) => u.id !== profile?.id && u.id !== delegatorId)
-                            .map((u) => (
-                               <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.jobTitle || 'Staff'})</option>
-                            ))
-                         }
-                      </select>
+                            .map((u) => ({ value: u.id, label: `${u.firstName} ${u.lastName} (${u.jobTitle || 'Staff'})` }))}
+                         value={delegateeId}
+                         onChange={(val) => setDelegateeId(val)}
+                         placeholder="Select Staff Member..."
+                      />
                    </div>
 
                    <div className="grid grid-cols-2 gap-4">

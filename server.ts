@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import apiRoutes from './server/routes/index.js';
@@ -21,7 +20,15 @@ async function startServer() {
   // Start background processing engine
   startWorker().catch(err => console.error("Worker failed to start:", err));
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  
+  // Serve static uploads folder for evidence files
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir));
   
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Supervisor Eye API Online' });
@@ -33,6 +40,7 @@ async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

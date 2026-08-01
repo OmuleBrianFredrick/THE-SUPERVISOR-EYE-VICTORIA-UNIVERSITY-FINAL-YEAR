@@ -1,3 +1,1 @@
-// UI Components
-// (To be implemented)
-export {};
+export * from './SearchableSelect';

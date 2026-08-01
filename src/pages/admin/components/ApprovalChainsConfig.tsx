@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { GitMerge, Plus, ArrowRight, Settings, Users, Watch, Loader2, X, Save, Trash2 } from 'lucide-react';
+import { GitMerge, Plus, ArrowRight, Settings, Users, Watch, Loader2, X, Save, Trash2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 
 export default function ApprovalChainsConfig() {
   const { getToken } = useAuth();
@@ -209,14 +210,29 @@ export default function ApprovalChainsConfig() {
 
        {/* Create Chain Modal */}
        {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200 border border-slate-200">
             <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <GitMerge className="w-5 h-5 text-indigo-600" /> 
-                Create Approval Chain
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-200 rounded text-slate-500 cursor-pointer">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Back to Default View"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back</span>
+                </button>
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <GitMerge className="w-5 h-5 text-indigo-600" /> 
+                  Create Approval Chain
+                </h2>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded text-slate-500 cursor-pointer flex items-center gap-1 text-xs font-bold">
+                <span>Close</span>
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -241,16 +257,15 @@ export default function ApprovalChainsConfig() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Department (Optional)</label>
-                      <select 
+                      <SearchableSelect
+                        options={[
+                          { value: "", label: "-- All Departments --" },
+                          ...departments.map(d => ({ value: d.id, label: d.name }))
+                        ]}
                         value={formData.departmentId}
-                        onChange={e => setFormData({...formData, departmentId: e.target.value})}
-                        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      >
-                        <option value="">-- All Departments --</option>
-                        {departments.map(d => (
-                           <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
+                        onChange={val => setFormData({...formData, departmentId: val})}
+                        placeholder="-- All Departments --"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Task Type (Optional)</label>
@@ -288,17 +303,15 @@ export default function ApprovalChainsConfig() {
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Reviewer Role *</label>
-                            <select 
-                              required
+                            <SearchableSelect
+                              options={[
+                                { value: "", label: "-- Select Role --" },
+                                ...roles.map(r => ({ value: r.id, label: r.name }))
+                              ]}
                               value={step.roleId}
-                              onChange={e => updateStep(idx, 'roleId', e.target.value)}
-                              className="w-full border border-slate-200 rounded p-2 text-xs outline-none bg-white"
-                            >
-                              <option value="">-- Select Role --</option>
-                              {roles.map(r => (
-                                 <option key={r.id} value={r.id}>{r.name}</option>
-                              ))}
-                            </select>
+                              onChange={val => updateStep(idx, 'roleId', val)}
+                              placeholder="-- Select Role --"
+                            />
                           </div>
                           <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">SLA Limit (Hours)</label>

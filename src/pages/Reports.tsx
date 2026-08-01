@@ -4,15 +4,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { 
   ArrowLeft, FileText, Search, Filter, Clock, MapPin, CheckCircle, AlertCircle, ArrowRight,
-  Eye, MessageSquare, History
+  Eye, MessageSquare, History, Plus, X, Send, ShieldCheck
 } from 'lucide-react';
 import EvidenceGallery from "../components/features/EvidenceGallery";
+import EvidenceUploader from "../components/features/EvidenceUploader";
 import { useReportsQuery, useInvalidateQueries } from "../hooks/useQueries";
 
 export default function Reports() {
   const { getToken, currentUser, profile } = useAuth();
   const navigate = useNavigate();
-  const { error } = useToast();
+  const { error, success } = useToast();
   const { data: reportsResponse, isLoading: loading } = useReportsQuery();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -20,6 +21,16 @@ export default function Reports() {
   const [timeline, setTimeline] = useState<{versions: any[], comments: any[]}>({versions: [], comments: []});
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Modal State for Report Creation
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [newReportForm, setNewReportForm] = useState({
+    reportType: 'SUPERVISOR_SUMMARY',
+    locationName: profile?.department || 'Operational Location',
+    notes: ''
+  });
+  const [createdReportForEvidence, setCreatedReportForEvidence] = useState<any | null>(null);
 
   const loadTimeline = async (reportId: string) => {
     try {
@@ -37,6 +48,50 @@ export default function Reports() {
 
   const reports = reportsResponse?.data || reportsResponse || [];
   const invalidateQueries = useInvalidateQueries();
+  
+  const handleCreateReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReportForm.notes.trim()) {
+      error('Please enter report notes or summary text');
+      return;
+    }
+    setIsSubmittingReport(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/v1/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          reportType: newReportForm.reportType,
+          locationName: newReportForm.locationName,
+          notes: newReportForm.notes,
+          status: 'PENDING_REVIEW'
+        })
+      });
+      if (res.ok) {
+        const created = await res.json();
+        success('Operational report created and submitted for review!');
+        invalidateQueries([["reports"]]);
+        setCreatedReportForEvidence(created);
+        setNewReportForm({
+          reportType: 'SUPERVISOR_SUMMARY',
+          locationName: profile?.department || 'Operational Location',
+          notes: ''
+        });
+      } else {
+        const err = await res.json();
+        error(err.error || 'Failed to create report');
+      }
+    } catch (err) {
+      error('Error submitting report');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const handleSelectReport = (report: any) => {
     setSelectedReport(report);
     if (report) {
@@ -109,7 +164,7 @@ export default function Reports() {
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-pink-500 outline-none transition"
+              className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-4 py-2 focus:ring-2 focus:ring-pink-500 outline-none transition cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="DRAFT">Draft</option>
@@ -117,6 +172,12 @@ export default function Reports() {
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
             </select>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer uppercase tracking-wider shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Create Report
+            </button>
           </div>
         </div>
       </div>
@@ -275,6 +336,102 @@ export default function Reports() {
           )}
         </div>
       </div>
+
+      {/* Create Operational Report Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-scaleIn flex flex-col max-h-[90vh]">
+            <div className="bg-slate-900 text-white p-5 flex justify-between items-center shrink-0">
+              <h2 className="font-black text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" /> Create Operational Report
+              </h2>
+              <button onClick={() => setIsCreateModalOpen(false)} className="p-1 hover:bg-slate-800 rounded-full transition cursor-pointer">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-4">
+              <form onSubmit={handleCreateReportSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Report Category / Type
+                    </label>
+                    <select
+                      value={newReportForm.reportType}
+                      onChange={e => setNewReportForm(prev => ({ ...prev, reportType: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 bg-white font-medium text-slate-800"
+                    >
+                      <option value="SUPERVISOR_SUMMARY">Supervisor Operational Summary</option>
+                      <option value="MANAGEMENT_BRIEF">Department Management Brief</option>
+                      <option value="DIVISION_PROGRESS">Division Progress & Activity</option>
+                      <option value="FIELD_VISIT">Field Audit & Site Supervision</option>
+                      <option value="DAILY">Daily Operational Report</option>
+                      <option value="WEEKLY">Weekly Progress Report</option>
+                      <option value="MONTHLY">Monthly Strategic Summary</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Location / Jurisdiction Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newReportForm.locationName}
+                      onChange={e => setNewReportForm(prev => ({ ...prev, locationName: e.target.value }))}
+                      placeholder="e.g. Central Command Center"
+                      className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 text-slate-800 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Operational Findings & Detailed Notes
+                  </label>
+                  <textarea
+                    required
+                    rows={5}
+                    value={newReportForm.notes}
+                    onChange={e => setNewReportForm(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Enter operational summary, task feedback, subordinate progress highlights, and observations..."
+                    className="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:ring-2 focus:ring-slate-900 text-slate-800 font-medium"
+                  ></textarea>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReport}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4 text-emerald-400" />
+                    {isSubmittingReport ? 'Submitting...' : 'Submit Report for Review'}
+                  </button>
+                </div>
+              </form>
+
+              {createdReportForEvidence && (
+                <div className="mt-6 pt-6 border-t border-slate-200 bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-extrabold text-indigo-950 text-sm flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                        Attach Media / Document Evidence
+                      </h4>
+                      <p className="text-xs text-indigo-700">Upload supporting evidence files directly for this report.</p>
+                    </div>
+                    <button onClick={() => setCreatedReportForEvidence(null)} className="text-xs text-indigo-600 hover:underline font-bold">Done</button>
+                  </div>
+                  <EvidenceUploader reportId={createdReportForEvidence.id} onUploadSuccess={() => invalidateQueries([["reports"]])} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { reports, evidence, tasks, users, auditLogs, departments, escalations } 
 import { eq, desc, and, or, sql } from 'drizzle-orm';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import { getPagination, buildPaginatedResponse } from '../utils/pagination.js';
+import { getAllLiveLocations } from '../services/locationStore.js';
 
 const router = Router();
 
@@ -138,8 +139,12 @@ router.get('/gis-data', async (req: any, res: any) => {
       { name: 'Albertine (Fort Portal)', lat: 0.6559, lng: 30.2727 }
     ];
 
+    const livePings = getAllLiveLocations();
+    const livePingMap = new Map(livePings.map(lp => [lp.userId, lp]));
+
     // Map workforce users
     const workforce = allUsers.map((user, idx) => {
+      const livePing = livePingMap.get(user.id);
       const regionIndex = Math.abs(user.id.split('-').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % regions.length;
       const baseRegion = regions[regionIndex];
       const latOffset = (idx % 17 - 8.5) * 0.007;
@@ -153,7 +158,7 @@ router.get('/gis-data', async (req: any, res: any) => {
       
       // Active status logic
       const randSeed = (idx * 3 + 7) % 100;
-      const status = randSeed < 70 ? 'ACTIVE' : randSeed < 92 ? 'IDLE' : 'HIGH_RISK';
+      const status = livePing ? 'ACTIVE' : (randSeed < 70 ? 'ACTIVE' : randSeed < 92 ? 'IDLE' : 'HIGH_RISK');
       const rating = 65 + (idx * 11) % 34;
       const deptName = user.departmentId ? (deptMap.get(user.departmentId)?.name || 'Operations') : 'Operations';
 
@@ -167,11 +172,41 @@ router.get('/gis-data', async (req: any, res: any) => {
         roleType,
         status,
         performanceRating: rating,
-        lat: baseRegion.lat + latOffset,
-        lng: baseRegion.lng + lngOffset,
-        lastActivity: new Date(Date.now() - (idx % 24) * 3600000).toISOString(),
+        lat: livePing ? livePing.lat : (baseRegion.lat + latOffset),
+        lng: livePing ? livePing.lng : (baseRegion.lng + lngOffset),
+        isRealDevice: livePing ? true : false,
+        accuracy: livePing?.accuracy,
+        speed: livePing?.speed,
+        heading: livePing?.heading,
+        lastActivity: livePing ? livePing.updatedAt : new Date(Date.now() - (idx % 24) * 3600000).toISOString(),
         currentTask: idx % 2 === 0 ? 'Stock Count Auditing' : 'Merchandising Compliance Review'
       };
+    });
+
+    // Also add any live device pings from signed-in users not in allUsers
+    livePings.forEach(lp => {
+      const alreadyInWorkforce = workforce.some(w => w.id === lp.userId);
+      if (!alreadyInWorkforce) {
+        workforce.unshift({
+          id: lp.userId,
+          firstName: lp.firstName,
+          lastName: lp.lastName,
+          employeeNumber: lp.employeeNumber || 'ME-LIVE',
+          department: lp.department || 'Operations',
+          jobTitle: lp.role || 'Field Staff',
+          roleType: lp.role || 'Field Staff',
+          status: 'ACTIVE',
+          performanceRating: 98,
+          lat: lp.lat,
+          lng: lp.lng,
+          isRealDevice: true,
+          accuracy: lp.accuracy,
+          speed: lp.speed,
+          heading: lp.heading,
+          lastActivity: lp.updatedAt,
+          currentTask: 'Real-Time Device Tracking Active'
+        });
+      }
     });
 
     // Map evidence locations

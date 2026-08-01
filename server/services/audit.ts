@@ -18,7 +18,8 @@ type AuditAction =
   | 'ACCOUNT_DEACTIVATED'
   | 'USER_ONBOARDING_COMPLETED'
   | 'DEPARTMENT_TRANSFER'
-  | 'USER_UPDATED';
+  | 'USER_UPDATED'
+  | 'TASK_DELETED';
 
 export async function logAudit(
   userId: string | null, 

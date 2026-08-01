@@ -117,13 +117,14 @@ export const updateTaskStatusSchema = z.object({
 // Reports
 export const createReportSchema = z.object({
   body: z.object({
-    taskId: z.string().uuid().optional(),
-    reportType: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'FIELD_VISIT', 'SALES_VISIT', 'STOCK_AUDIT']),
-    gpsLat: z.number().optional(),
-    gpsLng: z.number().optional(),
-    locationName: z.string().optional(),
-    outsideGeofence: z.boolean().optional(),
-    notes: z.string().optional(),
+    taskId: z.string().uuid().nullable().optional().or(z.literal('')),
+    reportType: z.string().min(1),
+    gpsLat: z.number().nullable().optional(),
+    gpsLng: z.number().nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    outsideGeofence: z.boolean().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    status: z.enum(['DRAFT', 'PENDING_REVIEW', 'SUBMITTED', 'APPROVED', 'REJECTED']).optional(),
   }),
 });
 

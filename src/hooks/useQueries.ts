@@ -137,6 +137,28 @@ export function useAdminStatsQuery() {
   });
 }
 
+export function useRolesQuery() {
+  const { getToken } = useAuth();
+  return useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchWithAuth('/api/v1/admin/roles', token);
+    },
+  });
+}
+
+export function useDepartmentsQuery() {
+  const { getToken } = useAuth();
+  return useQuery({
+    queryKey: ['departments'],
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchWithAuth('/api/v1/admin/departments', token);
+    },
+  });
+}
+
 export function useInvalidateQueries() {
   const queryClient = useQueryClient();
   return (keys: any[][]) => {
